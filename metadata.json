@@ -1,0 +1,6 @@
+{
+  "name": "Deklination & Konjugation",
+  "description": "German declension and verb conjugation, grammar tables, search history, pronunciation and smart export app.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

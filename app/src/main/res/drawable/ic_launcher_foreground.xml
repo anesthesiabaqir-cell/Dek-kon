@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Soft glow / shadow plate under book -->
+    <path
+        android:pathData="M30,78 Q54,84 78,78 Q82,82 78,84 Q54,89 30,84 Z"
+        android:fillColor="#33000000" />
+
+    <!-- Open Book Left Page -->
+    <path
+        android:pathData="M27,33 L52,36 L52,73 L27,70 Z"
+        android:fillColor="#E0E7FF" />
+
+    <!-- Open Book Right Page -->
+    <path
+        android:pathData="M56,36 L81,33 L81,70 L56,73 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Book Spine / Center Fold -->
+    <path
+        android:pathData="M52,36 L56,36 L56,73 L52,73 Z"
+        android:fillColor="#C7D2FE" />
+
+    <!-- Golden Bookmark Ribbon -->
+    <path
+        android:pathData="M51,32 L57,32 L57,60 L54,57 L51,60 Z"
+        android:fillColor="#FBBF24" />
+
+    <!-- Left Page: Bold Stylized "D" for Deklination -->
+    <!-- Outer curve of D -->
+    <path
+        android:pathData="M33,42 L42,42 C47,42 49,44 49,49 C49,54 47,56 42,56 L33,56 Z"
+        android:fillColor="#1E3A8A" />
+    <!-- Inner cutout of D -->
+    <path
+        android:pathData="M36,45 L41,45 C44,45 45,46 45,49 C45,52 44,53 41,53 L36,53 Z"
+        android:fillColor="#E0E7FF" />
+
+    <!-- Left Page subtitle line -->
+    <path
+        android:pathData="M33,62 L48,62"
+        android:strokeColor="#3B82F6"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+
+    <!-- Right Page: Declension Table Grid Lines (4 Cases: Nom, Akk, Dat, Gen) -->
+    <!-- Case 1: der -->
+    <path
+        android:pathData="M60,43 L66,43"
+        android:strokeColor="#2563EB"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M69,43 L76,43"
+        android:strokeColor="#93C5FD"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+
+    <!-- Case 2: den -->
+    <path
+        android:pathData="M60,49 L66,49"
+        android:strokeColor="#2563EB"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M69,49 L76,49"
+        android:strokeColor="#93C5FD"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+
+    <!-- Case 3: dem -->
+    <path
+        android:pathData="M60,55 L66,55"
+        android:strokeColor="#2563EB"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M69,55 L76,55"
+        android:strokeColor="#93C5FD"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+
+    <!-- Case 4: des -->
+    <path
+        android:pathData="M60,61 L66,61"
+        android:strokeColor="#2563EB"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M69,61 L76,61"
+        android:strokeColor="#93C5FD"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+
+    <!-- Star / Sparkle accent in upper right -->
+    <path
+        android:pathData="M78,25 L80,29 L84,31 L80,33 L78,37 L76,33 L72,31 L76,29 Z"
+        android:fillColor="#FBBF24" />
+
+</vector>

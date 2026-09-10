@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base DynamicTextView Style to prevent text truncation app-wide (including trailing punctuation like '?') -->
+    <style name="DynamicTextView" parent="android:Widget.TextView">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">none</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:autoSizeTextType">uniform</item>
+        <item name="android:autoSizeMinTextSize">8sp</item>
+        <item name="android:autoSizeMaxTextSize">24sp</item>
+    </style>
+
+    <!-- Specific style for Question labels (e.g. "Wem?", "Wer/Was?") -->
+    <style name="DynamicTextView.Question" parent="DynamicTextView">
+        <item name="android:autoSizeMinTextSize">10sp</item>
+        <item name="android:autoSizeMaxTextSize">16sp</item>
+        <item name="android:paddingEnd">8dp</item>
+    </style>
+</resources>

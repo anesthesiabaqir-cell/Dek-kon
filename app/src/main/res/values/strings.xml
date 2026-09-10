@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Deklination &amp; Konjugation</string>
+    <string name="export_dialog_title">Export &amp; Suchverlauf</string>
+    <string name="export_dialog_subtitle">PDF &amp; Excel (.xlsx) herunterladen &amp; teilen</string>
+    <string name="export_section_share">Direkt über andere Apps teilen:</string>
+    <string name="export_section_download">Auf das Gerät herunterladen:</string>
+    <string name="export_button_share_excel">Excel (.xlsx)</string>
+    <string name="export_button_share_pdf">PDF Export</string>
+    <string name="export_button_download_excel">Excel speichern</string>
+    <string name="export_button_download_pdf">PDF speichern</string>
+    <string name="export_button_print_pdf">Drucken &amp; System-PDF</string>
+    <string name="export_button_close">Schließen</string>
+
+    <!-- Settings dialog labels -->
+    <string name="settings_active_provider_test">Schlüssel testen (Test Key)</string>
+    <string name="settings_daily_quota_title">Tägliches Limit:</string>
+    <string name="settings_quota_notice">Tägliches Limit: 50 Anfragen</string>
+
+    <!-- Search Placeholders -->
+    <string name="search_placeholder_noun">Suche nach Nomen</string>
+    <string name="search_placeholder_verb">Suche nach Verben</string>
+
+    <!-- History Section -->
+    <string name="history_title">Suchverlauf</string>
+    <string name="history_search_hint">Verlauf durchsuchen</string>
+    <string name="history_clear_button">Leeren</string>
+    <!-- Speech Tempo -->
+    <string name="speech_tempo_title">Sprech-Tempo</string>
+</resources>
