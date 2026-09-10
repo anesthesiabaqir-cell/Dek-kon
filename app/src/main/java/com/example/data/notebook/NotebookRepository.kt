@@ -2,6 +2,7 @@ package com.example.data.notebook
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import com.example.data.local.WordHistoryEntity
@@ -9,15 +10,7 @@ import com.example.data.model.extractNounQuickDetails
 import com.example.data.model.extractVerbQuickDetails
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.InputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 /**
  * Repository managing the "Notizbücher" (Autonomous Learning Workbooks) hierarchy.
@@ -46,17 +39,52 @@ class NotebookRepository(private val context: Context) {
     }
 
     /**
+     * Checks if a directory exists or can be created, and is writable and readable.
+     */
+    private fun isDirWritableAndReadable(dir: File): Boolean {
+        return try {
+            if (!dir.exists()) {
+                if (!dir.mkdirs()) return false
+            }
+            val testProbe = File(dir, ".probe_${System.currentTimeMillis()}")
+            testProbe.writeText("ok")
+            val readOk = testProbe.readText() == "ok"
+            testProbe.delete()
+            readOk
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /**
      * Resolves the root directory: Documents/Deklination/Notizbücher/
+     * Safely falls back to app-specific external storage or internal storage
+     * if public external storage is not readable/writable (scoped storage on Android 10+).
      */
     fun getRootDirectory(): File {
-        val publicDocs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-        val primaryDir = File(publicDocs, ROOT_FOLDER_NAME)
-        if (primaryDir.exists() || primaryDir.mkdirs()) {
-            return primaryDir
-        }
-        val fallbackDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), ROOT_FOLDER_NAME)
-        fallbackDir.mkdirs()
-        return fallbackDir
+        try {
+            val publicDocs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+            val primaryDir = File(publicDocs, ROOT_FOLDER_NAME)
+            if (isDirWritableAndReadable(primaryDir)) {
+                return primaryDir
+            }
+        } catch (_: Throwable) {}
+
+        try {
+            val appExtDocs = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+            if (appExtDocs != null) {
+                val fallbackDir = File(appExtDocs, ROOT_FOLDER_NAME)
+                if (isDirWritableAndReadable(fallbackDir)) {
+                    return fallbackDir
+                }
+            }
+        } catch (_: Throwable) {}
+
+        val internalDir = File(context.filesDir, ROOT_FOLDER_NAME)
+        try {
+            internalDir.mkdirs()
+        } catch (_: Throwable) {}
+        return internalDir
     }
 
     /**
@@ -66,11 +94,17 @@ class NotebookRepository(private val context: Context) {
     @Synchronized
     fun ensureInitialized() {
         val root = getRootDirectory()
-        val notebookDirs = root.listFiles { file -> file.isDirectory }
+        val notebookDirs = try {
+            root.listFiles { file -> file.isDirectory }
+        } catch (_: Exception) {
+            null
+        }
 
         if (notebookDirs.isNullOrEmpty()) {
             val defaultFolder = File(root, DEFAULT_NOTEBOOK_ID)
-            defaultFolder.mkdirs()
+            try {
+                defaultFolder.mkdirs()
+            } catch (_: Throwable) {}
 
             // Initialize default settings.json
             val defaultSettings = NotebookSettings(
@@ -86,19 +120,27 @@ class NotebookRepository(private val context: Context) {
             }
 
             // Check if legacy Documents/Deklination/history.json exists and migrate
-            val legacyFile = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
-                "Deklination/history.json"
-            )
             val defaultHistoryFile = File(defaultFolder, HISTORY_FILE_NAME)
-            if (legacyFile.exists() && legacyFile.length() > 0) {
-                try {
-                    legacyFile.copyTo(defaultHistoryFile, overwrite = true)
-                } catch (e: Exception) {
+            try {
+                val legacyFile = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                    "Deklination/history.json"
+                )
+                if (legacyFile.exists() && legacyFile.length() > 0) {
+                    try {
+                        legacyFile.copyTo(defaultHistoryFile, overwrite = true)
+                    } catch (e: Exception) {
+                        defaultHistoryFile.writeText("[]")
+                    }
+                } else {
                     defaultHistoryFile.writeText("[]")
                 }
-            } else {
-                defaultHistoryFile.writeText("[]")
+            } catch (_: Exception) {
+                try {
+                    if (!defaultHistoryFile.exists()) {
+                        defaultHistoryFile.writeText("[]")
+                    }
+                } catch (_: Exception) {}
             }
 
             prefs.edit().putString(PREF_ACTIVE_NOTEBOOK, DEFAULT_NOTEBOOK_ID).apply()
@@ -127,13 +169,18 @@ class NotebookRepository(private val context: Context) {
 
     /**
      * Lists all notebooks found in the root directory.
+     * Guaranteed never to throw or enter infinite recursion.
      */
     @Synchronized
     fun listAllNotebooks(): List<Notebook> {
         val root = getRootDirectory()
-        val dirs = root.listFiles { file -> file.isDirectory } ?: emptyArray()
+        val dirs = try {
+            root.listFiles { file -> file.isDirectory } ?: emptyArray()
+        } catch (_: Throwable) {
+            emptyArray()
+        }
 
-        val list = dirs.mapNotNull { dir ->
+        var list = dirs.mapNotNull { dir ->
             try {
                 val settingsFile = File(dir, SETTINGS_FILE_NAME)
                 val settings = if (settingsFile.exists()) {
@@ -167,9 +214,44 @@ class NotebookRepository(private val context: Context) {
             }
         }.sortedByDescending { it.lastModified }
 
-        return if (list.isEmpty()) {
+        if (list.isEmpty()) {
             ensureInitialized()
-            listAllNotebooks()
+            val recheckedDirs = try {
+                root.listFiles { file -> file.isDirectory } ?: emptyArray()
+            } catch (_: Throwable) {
+                emptyArray()
+            }
+            list = recheckedDirs.mapNotNull { dir ->
+                try {
+                    val settingsFile = File(dir, SETTINGS_FILE_NAME)
+                    val settings = if (settingsFile.exists()) {
+                        NotebookSettings.fromJson(settingsFile.readText(), fallbackName = dir.name)
+                    } else {
+                        NotebookSettings(notebookName = dir.name)
+                    }
+                    Notebook(
+                        id = dir.name,
+                        name = settings.notebookName.ifBlank { dir.name },
+                        lastModified = dir.lastModified(),
+                        wordCount = 0,
+                        settings = settings
+                    )
+                } catch (_: Throwable) {
+                    null
+                }
+            }
+        }
+
+        return if (list.isEmpty()) {
+            listOf(
+                Notebook(
+                    id = DEFAULT_NOTEBOOK_ID,
+                    name = DEFAULT_NOTEBOOK_ID,
+                    lastModified = System.currentTimeMillis(),
+                    wordCount = 0,
+                    settings = NotebookSettings(notebookName = DEFAULT_NOTEBOOK_ID)
+                )
+            )
         } else {
             list
         }
@@ -178,7 +260,15 @@ class NotebookRepository(private val context: Context) {
     fun getActiveNotebook(): Notebook {
         val activeId = getActiveNotebookId()
         val all = listAllNotebooks()
-        return all.find { it.id == activeId } ?: all.first()
+        return all.find { it.id == activeId }
+            ?: all.firstOrNull()
+            ?: Notebook(
+                id = DEFAULT_NOTEBOOK_ID,
+                name = DEFAULT_NOTEBOOK_ID,
+                lastModified = System.currentTimeMillis(),
+                wordCount = 0,
+                settings = NotebookSettings(notebookName = DEFAULT_NOTEBOOK_ID)
+            )
     }
 
     /**
@@ -375,86 +465,156 @@ class NotebookRepository(private val context: Context) {
     }
 
     // =========================================================================
-    // ZIP Export and Import
+    // Direct JSON Export and Import (Direct JSON, zero ZIP compression)
     // =========================================================================
 
     /**
-     * Compresses a notebook folder (settings.json + history.json) into a .zip file.
+     * Exports a single notebook to a formatted JSON string.
+     * Contains the notebook name and its word history.
      */
-    fun exportNotebookToZip(notebookId: String, destZipFile: File): File {
-        val folder = File(getRootDirectory(), notebookId)
-        if (!folder.exists()) {
-            throw IllegalArgumentException("Notebook folder does not exist: $notebookId")
+    fun exportNotebookToJsonString(notebookId: String): String {
+        val items = loadNotebookHistory(notebookId)
+        val notebook = listAllNotebooks().find { it.id == notebookId }
+        val name = notebook?.name ?: notebookId
+        val obj = JSONObject().apply {
+            put("notebookName", name)
+            put("words", serializeHistoryToJson(items))
         }
-
-        destZipFile.parentFile?.mkdirs()
-        ZipOutputStream(BufferedOutputStream(FileOutputStream(destZipFile))).use { zos ->
-            val files = folder.listFiles() ?: emptyArray()
-            val buffer = ByteArray(4096)
-
-            for (file in files) {
-                if (file.isFile) {
-                    val entry = ZipEntry(file.name)
-                    zos.putNextEntry(entry)
-                    FileInputStream(file).use { fis ->
-                        var len: Int
-                        while (fis.read(buffer).also { len = it } > 0) {
-                            zos.write(buffer, 0, len)
-                        }
-                    }
-                    zos.closeEntry()
-                }
-            }
-        }
-        return destZipFile
+        return obj.toString(2)
     }
 
     /**
-     * Imports a notebook from a ZIP input stream.
-     * Extracts settings.json and history.json into a new or updated notebook folder.
+     * Exports all or selected notebooks into a single combined JSON string.
+     * Matches structure:
+     * {
+     *   "Allgemein": { "words": [...] },
+     *   "A1.1 - Grundlagen": { "words": [...] }
+     * }
      */
-    fun importNotebookFromZip(zipInputStream: InputStream, preferredName: String? = null): Notebook? {
-        val root = getRootDirectory()
-        var notebookName = preferredName ?: "Importiertes_Notizbuch"
-        var tempSettingsContent: String? = null
-        var tempHistoryContent: String? = null
+    fun exportNotebooksCombinedJsonString(notebookIds: List<String> = emptyList()): String {
+        val all = listAllNotebooks()
+        val targets = if (notebookIds.isEmpty()) all else all.filter { it.id in notebookIds }
+        val rootObj = JSONObject()
+        for (nb in targets) {
+            val items = loadNotebookHistory(nb.id)
+            val sectionObj = JSONObject().apply {
+                put("words", serializeHistoryToJson(items))
+            }
+            rootObj.put(nb.name, sectionObj)
+        }
+        return rootObj.toString(2)
+    }
 
-        ZipInputStream(BufferedInputStream(zipInputStream)).use { zis ->
-            var entry: ZipEntry? = zis.nextEntry
-            val buffer = ByteArray(4096)
+    /**
+     * Exports all or selected notebooks as individual JSON files into a SAF folder (treeUri).
+     * Returns the count of successfully created JSON files.
+     */
+    fun exportNotebooksToTreeUri(context: Context, treeUri: Uri, notebookIds: List<String> = emptyList()): Int {
+        val all = listAllNotebooks()
+        val targets = if (notebookIds.isEmpty()) all else all.filter { it.id in notebookIds }
+        val documentDir = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri) ?: return 0
+        if (!documentDir.canWrite()) return 0
 
-            while (entry != null) {
-                val fileName = File(entry.name).name
-                val outBytes = java.io.ByteArrayOutputStream()
-                var count: Int
-                while (zis.read(buffer).also { count = it } != -1) {
-                    outBytes.write(buffer, 0, count)
-                }
+        var count = 0
+        for (nb in targets) {
+            try {
+                val items = loadNotebookHistory(nb.id)
+                val jsonString = JSONObject().apply {
+                    put("notebookName", nb.name)
+                    put("words", serializeHistoryToJson(items))
+                }.toString(2)
 
-                val content = outBytes.toString(Charsets.UTF_8.name())
-                if (fileName.equals(SETTINGS_FILE_NAME, ignoreCase = true)) {
-                    tempSettingsContent = content
-                    try {
-                        val parsed = NotebookSettings.fromJson(content)
-                        if (parsed.notebookName.isNotBlank()) {
-                            notebookName = parsed.notebookName
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error extracting name from imported settings: ${e.message}")
+                val safeBase = sanitizeFileName(nb.name).ifBlank { "Notizbuch" }
+                val fileName = "$safeBase.json"
+
+                // Delete existing file in folder to overwrite cleanly
+                val existing = documentDir.findFile(fileName)
+                existing?.delete()
+
+                val newDoc = documentDir.createFile("application/json", fileName)
+                if (newDoc != null) {
+                    context.contentResolver.openOutputStream(newDoc.uri)?.use { os ->
+                        os.write(jsonString.toByteArray(Charsets.UTF_8))
                     }
-                } else if (fileName.equals(HISTORY_FILE_NAME, ignoreCase = true)) {
-                    tempHistoryContent = content
+                    count++
                 }
-                zis.closeEntry()
-                entry = zis.nextEntry
+            } catch (e: Exception) {
+                Log.e(TAG, "Error writing notebook ${nb.name} to tree URI", e)
             }
         }
+        return count
+    }
 
-        if (tempSettingsContent == null && tempHistoryContent == null) {
-            return null // Invalid zip file
+    /**
+     * Parses an arbitrary JSON string into either a single notebook or multiple notebooks representation.
+     */
+    fun parseImportedJson(jsonString: String, fallbackFileName: String = "Importiertes_Notizbuch"): ImportedJsonResult {
+        val trimmed = jsonString.trim()
+        if (trimmed.isEmpty()) return ImportedJsonResult.EmptyOrInvalid
+
+        val cleanFallback = fallbackFileName.removeSuffix(".json").removeSuffix(".JSON").trim().ifBlank { "Importiertes_Notizbuch" }
+
+        try {
+            // Case 1: Root is a JSON Array of words
+            if (trimmed.startsWith("[")) {
+                val items = parseJsonHistory(trimmed)
+                return if (items.isNotEmpty()) {
+                    ImportedJsonResult.SingleNotebook(cleanFallback, items)
+                } else {
+                    ImportedJsonResult.EmptyOrInvalid
+                }
+            }
+
+            val rootObj = JSONObject(trimmed)
+
+            // Case 2: Root object has "words" array directly
+            if (rootObj.has("words")) {
+                val wordsArray = rootObj.getJSONArray("words")
+                val name = rootObj.optString("notebookName").trim().ifBlank { cleanFallback }
+                val items = parseJsonHistory(wordsArray.toString())
+                return if (items.isNotEmpty()) {
+                    ImportedJsonResult.SingleNotebook(name, items)
+                } else {
+                    ImportedJsonResult.EmptyOrInvalid
+                }
+            }
+
+            // Case 3: Key-value map: { "Notebook1": { "words": [...] }, "Notebook2": { "words": [...] } }
+            // or { "Notebook1": [...] }
+            val notebooksMap = mutableMapOf<String, List<WordHistoryEntity>>()
+            val keys = rootObj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = rootObj.opt(key)
+                if (value is JSONObject && value.has("words")) {
+                    val wordsArray = value.getJSONArray("words")
+                    val items = parseJsonHistory(wordsArray.toString())
+                    notebooksMap[key] = items
+                } else if (value is JSONArray) {
+                    val items = parseJsonHistory(value.toString())
+                    notebooksMap[key] = items
+                }
+            }
+
+            if (notebooksMap.size > 1) {
+                return ImportedJsonResult.MultipleNotebooks(notebooksMap)
+            } else if (notebooksMap.size == 1) {
+                val entry = notebooksMap.entries.first()
+                return ImportedJsonResult.SingleNotebook(entry.key, entry.value)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing imported JSON", e)
         }
 
-        val cleanName = sanitizeFileName(notebookName)
+        return ImportedJsonResult.EmptyOrInvalid
+    }
+
+    /**
+     * Imports a single notebook as a brand-new notebook with the specified name.
+     */
+    fun importSingleNotebookAsNew(name: String, words: List<WordHistoryEntity>): Notebook {
+        val root = getRootDirectory()
+        val cleanName = sanitizeFileName(name).ifBlank { "Notizbuch" }
         var folderName = cleanName
         var counter = 1
         while (File(root, folderName).exists()) {
@@ -462,32 +622,60 @@ class NotebookRepository(private val context: Context) {
             counter++
         }
 
-        val targetDir = File(root, folderName)
-        targetDir.mkdirs()
-
-        val settings = if (tempSettingsContent != null) {
-            NotebookSettings.fromJson(tempSettingsContent!!, fallbackName = folderName).copy(
-                notebookName = notebookName
-            )
-        } else {
-            NotebookSettings(notebookName = notebookName)
-        }
-
+        val targetDir = File(root, folderName).apply { mkdirs() }
+        val settings = NotebookSettings(notebookName = name)
         File(targetDir, SETTINGS_FILE_NAME).writeText(settings.toJson())
-        File(targetDir, HISTORY_FILE_NAME).writeText(tempHistoryContent ?: "[]")
+        File(targetDir, HISTORY_FILE_NAME).writeText(serializeHistoryToJson(words).toString(2))
 
         val notebook = Notebook(
             id = folderName,
             name = settings.notebookName,
             lastModified = System.currentTimeMillis(),
-            wordCount = if (tempHistoryContent != null) {
-                try { JSONArray(tempHistoryContent!!).length() } catch (e: Exception) { 0 }
-            } else 0,
+            wordCount = words.size,
             settings = settings
         )
-
         setActiveNotebookId(folderName)
         return notebook
+    }
+
+    /**
+     * Merges imported words into the currently active notebook without losing existing items.
+     */
+    fun importSingleNotebookMergeActive(newWords: List<WordHistoryEntity>): List<WordHistoryEntity> {
+        val currentItems = loadActiveHistory()
+        val currentKeyMap = currentItems.associateBy { "${it.word.trim().lowercase()}_${it.type.trim().lowercase()}" }.toMutableMap()
+
+        // Merge: update existing or append new
+        for (item in newWords) {
+            val key = "${item.word.trim().lowercase()}_${item.type.trim().lowercase()}"
+            currentKeyMap[key] = item
+        }
+
+        val merged = currentKeyMap.values.sortedByDescending { it.timestamp }
+        saveActiveHistory(merged)
+        return merged
+    }
+
+    /**
+     * Imports multiple notebooks as separate individual notebooks.
+     */
+    fun importMultipleNotebooksSeparate(notebooksMap: Map<String, List<WordHistoryEntity>>): List<Notebook> {
+        val importedList = mutableListOf<Notebook>()
+        for ((name, words) in notebooksMap) {
+            val nb = importSingleNotebookAsNew(name, words)
+            importedList.add(nb)
+        }
+        if (importedList.isNotEmpty()) {
+            setActiveNotebookId(importedList.first().id)
+        }
+        return importedList
+    }
+
+    /**
+     * Imports multiple notebooks combined as a single notebook.
+     */
+    fun importMultipleNotebooksAsSingle(name: String, allWords: List<WordHistoryEntity>): Notebook {
+        return importSingleNotebookAsNew(name, allWords)
     }
 
     private fun sanitizeFileName(name: String): String {
@@ -570,4 +758,17 @@ class NotebookRepository(private val context: Context) {
         }
         return result
     }
+}
+
+sealed class ImportedJsonResult {
+    data class SingleNotebook(
+        val detectedName: String,
+        val words: List<WordHistoryEntity>
+    ) : ImportedJsonResult()
+
+    data class MultipleNotebooks(
+        val notebooks: Map<String, List<WordHistoryEntity>>
+    ) : ImportedJsonResult()
+
+    object EmptyOrInvalid : ImportedJsonResult()
 }

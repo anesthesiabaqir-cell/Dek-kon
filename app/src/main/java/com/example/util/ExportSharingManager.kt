@@ -330,7 +330,7 @@ object ExportSharingManager {
     }
 
     /**
-     * Shares an arbitrary file (e.g. ZIP archive, PDF, XLSX) via Android share sheet.
+     * Shares an arbitrary file (e.g. PDF, XLSX, JSON) via Android share sheet.
      */
     fun shareFile(context: Context, file: File, mimeType: String, title: String) {
         try {
@@ -349,6 +349,51 @@ object ExportSharingManager {
             context.startActivity(chooser)
         } catch (e: Exception) {
             Toast.makeText(context, "Fehler beim Teilen: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Shares JSON text as a .json file via Android share sheet.
+     */
+    fun shareJsonContent(
+        context: Context,
+        fileName: String,
+        jsonContent: String,
+        title: String = "JSON exportieren"
+    ) {
+        try {
+            val safeName = if (fileName.endsWith(".json", ignoreCase = true)) fileName else "$fileName.json"
+            val sanitized = sanitizeFileName(safeName.removeSuffix(".json")) + ".json"
+            val file = File(context.cacheDir, sanitized)
+            file.writeText(jsonContent, Charsets.UTF_8)
+            shareFile(
+                context = context,
+                file = file,
+                mimeType = "application/json",
+                title = title
+            )
+        } catch (e: Exception) {
+            Toast.makeText(context, "Fehler beim Teilen: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Writes JSON content to a Uri created by ACTION_CREATE_DOCUMENT.
+     */
+    fun saveJsonToUri(
+        context: Context,
+        uri: Uri,
+        jsonContent: String
+    ): Boolean {
+        return try {
+            context.contentResolver.openOutputStream(uri)?.use { os ->
+                os.write(jsonContent.toByteArray(Charsets.UTF_8))
+            }
+            Toast.makeText(context, "JSON-Datei erfolgreich gespeichert!", Toast.LENGTH_SHORT).show()
+            true
+        } catch (e: Exception) {
+            Toast.makeText(context, "Fehler beim Speichern: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            false
         }
     }
 

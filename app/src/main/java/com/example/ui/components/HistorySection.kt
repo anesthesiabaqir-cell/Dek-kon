@@ -1293,16 +1293,14 @@ fun HistoryItemCard(
                 val shortDate = remember(item.timestamp) {
                     HistoryFormatterCache.formatShortDate(item.timestamp)
                 }
-                val metaScrollState = rememberScrollState()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(28.dp)
-                        .horizontalScroll(metaScrollState),
+                        .height(28.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // 1. Date with emoji: 📅 08.09.2026
+                    // 1. Date with emoji: 📅 08.09.2026 (left)
                     Text(
                         text = "📅 $shortDate",
                         style = TextStyle(
@@ -1313,7 +1311,7 @@ fun HistoryItemCard(
                         softWrap = false
                     )
 
-                    // 2. Gender badge
+                    // 2. Gender badge moved to far right (colored container)
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -1333,18 +1331,6 @@ fun HistoryItemCard(
                             softWrap = false
                         )
                     }
-
-                    // 3. Nomen indicator in bold blue
-                    Text(
-                        text = "nomen",
-                        style = TextStyle(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1976D2)
-                        ),
-                        maxLines = 1,
-                        softWrap = false
-                    )
                 }
             }
         }

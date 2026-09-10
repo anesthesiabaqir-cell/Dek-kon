@@ -2,6 +2,8 @@ package com.example.ui
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -96,9 +98,13 @@ import com.example.ui.components.DeclensionResultView
 import com.example.ui.components.DeleteHistoryItemConfirmDialog
 import com.example.ui.components.FolderSelectionOverlay
 import com.example.ui.components.HistorySection
+import com.example.ui.components.ImportMultiChoiceDialog
+import com.example.ui.components.ImportSingleChoiceDialog
+import com.example.ui.components.JsonExportActionDialog
 import com.example.ui.components.NotebookManagerDialog
 import com.example.ui.components.NotebookSwitcher
 import com.example.ui.components.PrintExportDialog
+import com.example.ui.components.SelectNotebooksExportDialog
 import com.example.ui.components.SprechTempoControl
 import com.example.ui.components.VerbConjugationResultView
 import com.example.ui.components.historySectionItems
@@ -137,6 +143,23 @@ fun MainScreen(
     var showClearHistoryDialog by remember { mutableStateOf(false) }
     var historyItemToDeleteId by remember { mutableStateOf<Long?>(null) }
     var historySearchQuery by rememberSaveable { mutableStateOf("") }
+
+    val saveJsonLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            viewModel.executeSaveJsonToUri(uri, context)
+        }
+    }
+
+    val treeFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val pendingIds = uiState.pendingTreeExportNotebookIds ?: emptyList()
+            viewModel.executeTreeExport(uri, context, pendingIds)
+        }
+    }
 
     val filteredHistoryList by produceState(
         initialValue = historyList,
@@ -721,11 +744,90 @@ fun MainScreen(
             onDeleteNotebook = { id ->
                 viewModel.deleteNotebook(id)
             },
-            onExportZip = { id ->
-                viewModel.exportNotebookZip(id, context)
+            onExportJson = { id ->
+                viewModel.prepareSingleNotebookExport(id)
             },
-            onImportZip = { uri ->
-                viewModel.importNotebookZip(uri, context)
+            onImportJson = { uri ->
+                viewModel.handleImportJsonUri(uri, context)
+            },
+            onExportAllCombined = {
+                viewModel.prepareAllNotebooksCombinedExport()
+            },
+            onExportAllSeparate = {
+                viewModel.setPendingTreeExport(null)
+                treeFolderLauncher.launch(null)
+            },
+            onExportSelectedClick = {
+                viewModel.openSelectNotebooksExportDialog()
+            }
+        )
+    }
+
+    // JSON Action Dialog (Speichern unter / Teilen)
+    uiState.activeJsonExportTarget?.let { target ->
+        JsonExportActionDialog(
+            fileName = target.fileName,
+            title = target.title,
+            onSaveToFile = {
+                saveJsonLauncher.launch(target.fileName)
+            },
+            onShare = {
+                viewModel.shareActiveJsonExport(context)
+            },
+            onDismiss = {
+                viewModel.dismissJsonExportDialog()
+            }
+        )
+    }
+
+    // Select Notebooks Export Dialog (Option 3)
+    if (uiState.isSelectNotebooksExportDialogOpen) {
+        SelectNotebooksExportDialog(
+            notebooks = uiState.allNotebooks,
+            onDismiss = { viewModel.closeSelectNotebooksExportDialog() },
+            onExportCombined = { selectedIds ->
+                viewModel.closeSelectNotebooksExportDialog()
+                viewModel.prepareSelectedNotebooksCombinedExport(selectedIds)
+            },
+            onExportSeparate = { selectedIds ->
+                viewModel.closeSelectNotebooksExportDialog()
+                viewModel.setPendingTreeExport(selectedIds)
+                treeFolderLauncher.launch(null)
+            }
+        )
+    }
+
+    // Single Notebook Import Choice Dialog
+    uiState.importSingleChoice?.let { singleChoice ->
+        ImportSingleChoiceDialog(
+            detectedName = singleChoice.detectedName,
+            wordCount = singleChoice.words.size,
+            onMergeIntoActive = {
+                viewModel.executeImportSingleMerge()
+            },
+            onCreateAsNew = { newName ->
+                viewModel.executeImportSingleAsNew(newName)
+            },
+            onDismiss = {
+                viewModel.dismissImportSingleChoice()
+            }
+        )
+    }
+
+    // Multi-Notebook Import Choice Dialog
+    uiState.importMultiChoice?.let { multiChoice ->
+        ImportMultiChoiceDialog(
+            notebookNames = multiChoice.notebooksMap.keys.toList(),
+            totalWordCount = multiChoice.notebooksMap.values.sumOf { it.size },
+            fallbackName = multiChoice.fallbackName,
+            onImportAllSeparate = {
+                viewModel.executeImportMultiSeparate()
+            },
+            onImportAsSingle = { name ->
+                viewModel.executeImportMultiAsSingle(name)
+            },
+            onDismiss = {
+                viewModel.dismissImportMultiChoice()
             }
         )
     }

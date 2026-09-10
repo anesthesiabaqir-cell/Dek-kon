@@ -90,11 +90,19 @@ fun MyApplicationTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as? Activity)?.window
-            if (window != null) {
-                val insetsController = WindowCompat.getInsetsController(window, view)
-                insetsController.isAppearanceLightStatusBars = !darkTheme
-                insetsController.isAppearanceLightNavigationBars = !darkTheme
+            try {
+                var ctx = view.context
+                while (ctx is android.content.ContextWrapper && ctx !is Activity) {
+                    ctx = ctx.baseContext
+                }
+                val window = (ctx as? Activity)?.window
+                if (window != null) {
+                    val insetsController = WindowCompat.getInsetsController(window, view)
+                    insetsController.isAppearanceLightStatusBars = !darkTheme
+                    insetsController.isAppearanceLightNavigationBars = !darkTheme
+                }
+            } catch (_: Throwable) {
+                // Safe ignore for tests and custom context wrappers
             }
         }
     }

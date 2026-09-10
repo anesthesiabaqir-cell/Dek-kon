@@ -31,21 +31,28 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -55,6 +62,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -448,17 +457,20 @@ fun NotebookManagerDialog(
     onCreateNotebook: () -> Unit,
     onRenameNotebook: (id: String, newName: String) -> Unit,
     onDeleteNotebook: (id: String) -> Unit,
-    onExportZip: (notebookId: String) -> Unit,
-    onImportZip: (uri: Uri) -> Unit
+    onExportJson: (notebookId: String) -> Unit,
+    onImportJson: (uri: Uri) -> Unit,
+    onExportAllCombined: () -> Unit,
+    onExportAllSeparate: () -> Unit,
+    onExportSelectedClick: () -> Unit
 ) {
     var notebookToRename by remember { mutableStateOf<Notebook?>(null) }
     var notebookToDelete by remember { mutableStateOf<Notebook?>(null) }
 
-    val zipPickerLauncher = rememberLauncherForActivityResult(
+    val jsonPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            onImportZip(uri)
+            onImportJson(uri)
         }
     }
 
@@ -542,7 +554,7 @@ fun NotebookManagerDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Actions toolbar
+                // Actions toolbar: [ + Neues Notizbuch ] [ Aus JSON laden ]
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -574,7 +586,7 @@ fun NotebookManagerDialog(
                     }
 
                     OutlinedButton(
-                        onClick = { zipPickerLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                        onClick = { jsonPickerLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .weight(1f)
@@ -583,14 +595,14 @@ fun NotebookManagerDialog(
                         border = BorderStroke(1.dp, GeoBorder)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.FolderZip,
+                            imageVector = Icons.Default.FileDownload,
                             contentDescription = null,
                             modifier = Modifier.size(15.dp),
                             tint = GeoPrimary
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Aus ZIP laden",
+                            text = "Aus JSON laden",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = GeoOnSurface,
@@ -601,6 +613,200 @@ fun NotebookManagerDialog(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(thickness = 0.5.dp, color = GeoBorder)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 📂 Export-Optionen Section
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = GeoSurfaceVariant.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, GeoBorder.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                tint = GeoPrimary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Export-Optionen",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GeoPrimary
+                            )
+                        }
+
+                        // Option 1: Alle Notizbücher exportieren (eine Datei)
+                        Surface(
+                            onClick = onExportAllCombined,
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.Transparent,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.5.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Description,
+                                        contentDescription = null,
+                                        tint = GeoOnSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "Alle Notizbücher exportieren (eine Datei)",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = GeoOnSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "Kombiniert alle Hefte in Alle Notizbücher.json",
+                                            fontSize = 9.5.sp,
+                                            color = GeoOnSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = GeoOnSurfaceVariant,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+
+                        // Option 2: Alle Notizbücher exportieren (einzelne Dateien)
+                        Surface(
+                            onClick = onExportAllSeparate,
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.Transparent,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.5.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Folder,
+                                        contentDescription = null,
+                                        tint = GeoOnSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "Alle Notizbücher exportieren (einzelne Dateien)",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = GeoOnSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "Jedes Heft als eigene .json in Ordner speichern",
+                                            fontSize = 9.5.sp,
+                                            color = GeoOnSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = GeoOnSurfaceVariant,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+
+                        // Option 3: Ausgewählte Notizbücher exportieren
+                        Surface(
+                            onClick = onExportSelectedClick,
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.Transparent,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.5.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Checklist,
+                                        contentDescription = null,
+                                        tint = GeoOnSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "Ausgewählte Notizbücher exportieren",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = GeoOnSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "Auswahl treffen: kombiniert oder separat",
+                                            fontSize = 9.5.sp,
+                                            color = GeoOnSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = GeoOnSurfaceVariant,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider(thickness = 0.5.dp, color = GeoBorder)
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -796,10 +1002,10 @@ fun NotebookManagerDialog(
                                             )
 
                                             DropdownMenuItem(
-                                                text = { Text("Als ZIP exportieren", fontSize = 13.sp, color = GeoOnSurface) },
+                                                text = { Text("Als JSON exportieren", fontSize = 13.sp, color = GeoOnSurface) },
                                                 leadingIcon = {
                                                     Icon(
-                                                        imageVector = Icons.Default.Archive,
+                                                        imageVector = Icons.Default.UploadFile,
                                                         contentDescription = null,
                                                         tint = GeoPrimary,
                                                         modifier = Modifier.size(16.dp)
@@ -807,7 +1013,7 @@ fun NotebookManagerDialog(
                                                 },
                                                 onClick = {
                                                     showMenu = false
-                                                    onExportZip(notebook.id)
+                                                    onExportJson(notebook.id)
                                                 }
                                             )
 
@@ -949,4 +1155,564 @@ fun NotebookManagerDialog(
             }
         )
     }
+}
+
+/**
+ * Dialog offering Save or Share choice for exported JSON.
+ */
+@Composable
+fun JsonExportActionDialog(
+    fileName: String,
+    title: String,
+    onSaveToFile: () -> Unit,
+    onShare: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.UploadFile,
+                contentDescription = null,
+                tint = GeoPrimary,
+                modifier = Modifier.size(28.dp)
+            )
+        },
+        title = {
+            Text(
+                text = title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = GeoOnSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = GeoSurfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, GeoBorder.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = null,
+                            tint = GeoPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = fileName,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GeoOnSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Möchten Sie die JSON-Datei auf Ihrem Gerät speichern oder direkt über eine andere App teilen?",
+                    fontSize = 12.5.sp,
+                    color = GeoOnSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onSaveToFile,
+                colors = ButtonDefaults.buttonColors(containerColor = GeoPrimary)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Save,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = GeoOnPrimary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "In Datei speichern",
+                    color = GeoOnPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = onShare) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = GeoPrimary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Teilen",
+                        color = GeoPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        text = "Abbrechen",
+                        color = GeoOnSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        },
+        containerColor = GeoSurface,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+/**
+ * Dialog for selecting specific notebooks to export (Option 3).
+ */
+@Composable
+fun SelectNotebooksExportDialog(
+    notebooks: List<Notebook>,
+    onDismiss: () -> Unit,
+    onExportCombined: (selectedIds: List<String>) -> Unit,
+    onExportSeparate: (selectedIds: List<String>) -> Unit
+) {
+    var selectedIds by remember { mutableStateOf(notebooks.map { it.id }.toSet()) }
+    var exportMode by remember { mutableStateOf("combined") } // "combined" or "separate"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Checklist,
+                    contentDescription = null,
+                    tint = GeoPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = "Ausgewählte Notizbücher",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GeoOnSurface
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Quick toggles: Alle / Keine
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${selectedIds.size} von ${notebooks.size} ausgewählt",
+                        fontSize = 12.sp,
+                        color = GeoOnSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = { selectedIds = notebooks.map { it.id }.toSet() },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Text("Alle", fontSize = 11.sp, color = GeoPrimary)
+                        }
+                        TextButton(
+                            onClick = { selectedIds = emptySet() },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Text("Keine", fontSize = 11.sp, color = GeoOnSurfaceVariant)
+                        }
+                    }
+                }
+
+                // List of notebooks with checkboxes
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .background(GeoSurfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    items(notebooks, key = { it.id }) { nb ->
+                        val isChecked = selectedIds.contains(nb.id)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedIds = if (isChecked) {
+                                        selectedIds - nb.id
+                                    } else {
+                                        selectedIds + nb.id
+                                    }
+                                }
+                                .padding(vertical = 4.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { checked ->
+                                    selectedIds = if (checked) {
+                                        selectedIds + nb.id
+                                    } else {
+                                        selectedIds - nb.id
+                                    }
+                                },
+                                colors = CheckboxDefaults.colors(checkedColor = GeoPrimary),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = nb.name,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = GeoOnSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${nb.wordCount} Wörter",
+                                    fontSize = 10.5.sp,
+                                    color = GeoOnSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Export mode selection
+                Text(
+                    text = "Export-Format:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GeoOnSurface,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
+                Surface(
+                    onClick = { exportMode = "combined" },
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (exportMode == "combined") GeoPrimaryContainer.copy(alpha = 0.4f) else Color.Transparent,
+                    border = BorderStroke(1.dp, if (exportMode == "combined") GeoPrimary else GeoBorder.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = exportMode == "combined",
+                            onClick = { exportMode = "combined" },
+                            colors = RadioButtonDefaults.colors(selectedColor = GeoPrimary),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Als eine Datei (kombiniert)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = GeoOnSurface
+                            )
+                            Text(
+                                text = "Ausgewählte Notizbücher.json",
+                                fontSize = 10.sp,
+                                color = GeoOnSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    onClick = { exportMode = "separate" },
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (exportMode == "separate") GeoPrimaryContainer.copy(alpha = 0.4f) else Color.Transparent,
+                    border = BorderStroke(1.dp, if (exportMode == "separate") GeoPrimary else GeoBorder.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = exportMode == "separate",
+                            onClick = { exportMode = "separate" },
+                            colors = RadioButtonDefaults.colors(selectedColor = GeoPrimary),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Als separate Dateien",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = GeoOnSurface
+                            )
+                            Text(
+                                text = "In ausgewählten Zielordner speichern",
+                                fontSize = 10.sp,
+                                color = GeoOnSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val list = selectedIds.toList()
+                    if (exportMode == "combined") {
+                        onExportCombined(list)
+                    } else {
+                        onExportSeparate(list)
+                    }
+                },
+                enabled = selectedIds.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(containerColor = GeoPrimary)
+            ) {
+                Text(
+                    text = "Exportieren (${selectedIds.size})",
+                    fontSize = 12.5.sp,
+                    color = GeoOnPrimary
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Abbrechen", fontSize = 12.5.sp, color = GeoOnSurfaceVariant)
+            }
+        },
+        containerColor = GeoSurface,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+/**
+ * Dialog when importing a single notebook from JSON.
+ */
+@Composable
+fun ImportSingleChoiceDialog(
+    detectedName: String,
+    wordCount: Int,
+    onMergeIntoActive: () -> Unit,
+    onCreateAsNew: (name: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var notebookName by remember { mutableStateOf(detectedName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.FileDownload,
+                contentDescription = null,
+                tint = GeoPrimary,
+                modifier = Modifier.size(28.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Notizbuch importieren",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = GeoOnSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "In der JSON-Datei wurden $wordCount Wörter gefunden. Wählen Sie, wie diese importiert werden sollen:",
+                    fontSize = 12.5.sp,
+                    color = GeoOnSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = notebookName,
+                    onValueChange = { notebookName = it },
+                    label = { Text("Name für neues Notizbuch") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GeoPrimary,
+                        unfocusedBorderColor = GeoBorder
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Button(
+                    onClick = { onCreateAsNew(notebookName) },
+                    colors = ButtonDefaults.buttonColors(containerColor = GeoPrimary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Als neues Notizbuch erstellen",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GeoOnPrimary
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onMergeIntoActive,
+                    border = BorderStroke(1.dp, GeoPrimary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "In aktives Notizbuch zusammenführen",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GeoPrimary
+                    )
+                }
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Abbrechen",
+                        fontSize = 12.sp,
+                        color = GeoOnSurfaceVariant
+                    )
+                }
+            }
+        },
+        containerColor = GeoSurface,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+/**
+ * Dialog when importing multiple notebooks from a combined JSON.
+ */
+@Composable
+fun ImportMultiChoiceDialog(
+    notebookNames: List<String>,
+    totalWordCount: Int,
+    fallbackName: String,
+    onImportAllSeparate: () -> Unit,
+    onImportAsSingle: (name: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var singleNotebookName by remember { mutableStateOf(fallbackName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.FolderZip,
+                contentDescription = null,
+                tint = GeoPrimary,
+                modifier = Modifier.size(28.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Mehrere Notizbücher gefunden",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = GeoOnSurface
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Die Datei enthält ${notebookNames.size} Notizbücher mit insgesamt $totalWordCount Wörtern:\n• ${notebookNames.take(4).joinToString("\n• ")}${if (notebookNames.size > 4) "\n• ... und weitere" else ""}",
+                    fontSize = 12.5.sp,
+                    color = GeoOnSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = singleNotebookName,
+                    onValueChange = { singleNotebookName = it },
+                    label = { Text("Name bei Zusammenfassung als ein Notizbuch") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GeoPrimary,
+                        unfocusedBorderColor = GeoBorder
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Button(
+                    onClick = onImportAllSeparate,
+                    colors = ButtonDefaults.buttonColors(containerColor = GeoPrimary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Alle importieren (${notebookNames.size} separate Notizbücher)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GeoOnPrimary
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = { onImportAsSingle(singleNotebookName) },
+                    border = BorderStroke(1.dp, GeoPrimary),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Als ein Notizbuch importieren",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GeoPrimary
+                    )
+                }
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Abbrechen",
+                        fontSize = 12.sp,
+                        color = GeoOnSurfaceVariant
+                    )
+                }
+            }
+        },
+        containerColor = GeoSurface,
+        shape = RoundedCornerShape(16.dp)
+    )
 }

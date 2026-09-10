@@ -21,6 +21,7 @@ import com.example.data.model.WordDeclensionResult
 import com.example.data.notebook.Notebook
 import com.example.data.notebook.NotebookRepository
 import com.example.data.notebook.NotebookSettings
+import com.example.data.notebook.ImportedJsonResult
 import com.example.data.remote.GeminiDeclensionService
 import com.example.data.repository.WordRepository
 import com.example.ui.theme.AppThemePackage
@@ -36,6 +37,22 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+data class JsonExportTarget(
+    val fileName: String,
+    val jsonContent: String,
+    val title: String
+)
+
+data class ImportSingleChoice(
+    val detectedName: String,
+    val words: List<WordHistoryEntity>
+)
+
+data class ImportMultiChoice(
+    val notebooksMap: Map<String, List<WordHistoryEntity>>,
+    val fallbackName: String
+)
 
 data class MainUiState(
     val searchQuery: String = "",
@@ -72,13 +89,29 @@ data class MainUiState(
     val activeNotebook: Notebook? = null,
     val themeMode: String = "auto", // "auto", "light", "dark"
     val isCreateNotebookDialogOpen: Boolean = false,
-    val isManageNotebooksDialogOpen: Boolean = false
+    val isManageNotebooksDialogOpen: Boolean = false,
+    val activeJsonExportTarget: JsonExportTarget? = null,
+    val isSelectNotebooksExportDialogOpen: Boolean = false,
+    val pendingTreeExportNotebookIds: List<String>? = null,
+    val importSingleChoice: ImportSingleChoice? = null,
+    val importMultiChoice: ImportMultiChoice? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val notebookRepository: NotebookRepository = NotebookRepository(application)
-    private val repository: WordRepository
+    private val database: AppDatabase = AppDatabase.getDatabase(application)
+    private val apiKeyManager: ApiKeyManager = ApiKeyManager(application)
+    private val geminiService: GeminiDeclensionService = GeminiDeclensionService(application)
+    private val externalStorage: ExternalHistoryStorage = ExternalHistoryStorage(application)
+    private val repository: WordRepository = WordRepository(
+        historyDao = database.wordHistoryDao(),
+        geminiService = geminiService,
+        apiKeyManager = apiKeyManager,
+        searchQueryDao = database.searchQueryDao(),
+        externalHistoryStorage = externalStorage,
+        notebookRepository = notebookRepository
+    )
     private val themePreferences: ThemePreferences = ThemePreferences(application)
     private val ttsManager: GermanTtsManager = GermanTtsManager(application)
 
@@ -102,82 +135,73 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    val historyList: StateFlow<List<WordHistoryEntity>>
-    val recentQueries: StateFlow<List<SearchQueryEntity>>
+    val historyList: StateFlow<List<WordHistoryEntity>> = repository.searchHistory.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+    val recentQueries: StateFlow<List<SearchQueryEntity>> = repository.recentSearchQueries.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     init {
-        val database = AppDatabase.getDatabase(application)
-        val apiKeyManager = ApiKeyManager(application)
-        val geminiService = GeminiDeclensionService(application)
-        val externalStorage = ExternalHistoryStorage(application)
-        repository = WordRepository(
-            historyDao = database.wordHistoryDao(),
-            geminiService = geminiService,
-            apiKeyManager = apiKeyManager,
-            searchQueryDao = database.searchQueryDao(),
-            externalHistoryStorage = externalStorage,
-            notebookRepository = notebookRepository
-        )
-
         viewModelScope.launch {
-            repository.syncHistoryOnStartup()
+            try {
+                repository.syncHistoryOnStartup()
+            } catch (e: Throwable) {
+                Log.e("MainViewModel", "Failed to sync history on startup", e)
+            }
         }
 
-        val allNotebooks = notebookRepository.listAllNotebooks()
-        val activeNotebook = notebookRepository.getActiveNotebook()
-        val notebookSettings = activeNotebook.settings
+        try {
+            val allNotebooks = notebookRepository.listAllNotebooks()
+            val activeNotebook = notebookRepository.getActiveNotebook()
+            val notebookSettings = activeNotebook.settings
 
-        // Apply notebook settings
-        val activeTheme = AppThemePackage.fromId(notebookSettings.themeColorId)
-        val activeThemeMode = notebookSettings.themeMode
-        ttsManager.setSpeedRate(notebookSettings.ttsSpeed)
+            // Apply notebook settings
+            val activeTheme = AppThemePackage.fromId(notebookSettings.themeColorId)
+            val activeThemeMode = notebookSettings.themeMode
+            ttsManager.setSpeedRate(notebookSettings.ttsSpeed)
 
-        val isConfigured = if (notebookSettings.customApiKey.isNotBlank() || notebookSettings.openRouterApiKey.isNotBlank()) {
-            true
-        } else {
-            repository.isApiKeyConfigured()
+            val isConfigured = if (notebookSettings.customApiKey.isNotBlank() || notebookSettings.openRouterApiKey.isNotBlank()) {
+                true
+            } else {
+                repository.isApiKeyConfigured()
+            }
+            val provider = ModelProvider.fromId(notebookSettings.selectedProvider)
+            val currentModel = notebookSettings.selectedModel.ifBlank { repository.getSelectedModel(provider) }
+            val geminiKey = notebookSettings.customApiKey.ifBlank { repository.getUserEnteredGeminiKey() }
+            val openRouterKey = notebookSettings.openRouterApiKey.ifBlank { repository.getOpenRouterApiKey() }
+            val (remaining, total) = repository.getDailyUsage(provider, currentModel)
+            val folderName = if (notebookSettings.storageFolderUri.isNotBlank()) {
+                notebookSettings.storageFolderUri
+            } else {
+                "Standard (${activeNotebook.name})"
+            }
+
+            _uiState.value = _uiState.value.copy(
+                allNotebooks = allNotebooks,
+                activeNotebook = activeNotebook,
+                themeMode = activeThemeMode,
+                hasApiKey = isConfigured,
+                selectedProvider = provider,
+                apiKeyInput = geminiKey,
+                geminiApiKeyInput = geminiKey,
+                openRouterApiKeyInput = openRouterKey,
+                otherApiKeyInput = openRouterKey,
+                selectedModel = currentModel,
+                availableModels = repository.getAvailableModelsForProvider(provider),
+                selectedTheme = activeTheme,
+                remainingDailyRequests = remaining,
+                totalDailyQuota = total,
+                isFolderSelectionRequired = false,
+                selectedHistoryFolderName = folderName
+            )
+        } catch (e: Throwable) {
+            Log.e("MainViewModel", "Failed to load initial notebook settings", e)
         }
-        val provider = ModelProvider.fromId(notebookSettings.selectedProvider)
-        val currentModel = notebookSettings.selectedModel.ifBlank { repository.getSelectedModel(provider) }
-        val geminiKey = notebookSettings.customApiKey.ifBlank { repository.getUserEnteredGeminiKey() }
-        val openRouterKey = notebookSettings.openRouterApiKey.ifBlank { repository.getOpenRouterApiKey() }
-        val (remaining, total) = repository.getDailyUsage(provider, currentModel)
-        val folderName = if (notebookSettings.storageFolderUri.isNotBlank()) {
-            notebookSettings.storageFolderUri
-        } else {
-            "Standard (${activeNotebook.name})"
-        }
-
-        _uiState.value = _uiState.value.copy(
-            allNotebooks = allNotebooks,
-            activeNotebook = activeNotebook,
-            themeMode = activeThemeMode,
-            hasApiKey = isConfigured,
-            selectedProvider = provider,
-            apiKeyInput = geminiKey,
-            geminiApiKeyInput = geminiKey,
-            openRouterApiKeyInput = openRouterKey,
-            otherApiKeyInput = openRouterKey,
-            selectedModel = currentModel,
-            availableModels = repository.getAvailableModelsForProvider(provider),
-            selectedTheme = activeTheme,
-            remainingDailyRequests = remaining,
-            totalDailyQuota = total,
-            isFolderSelectionRequired = false,
-            selectedHistoryFolderName = folderName
-        )
-
-        historyList = repository.searchHistory.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-        recentQueries = repository.recentSearchQueries.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
     }
 
     private fun refreshUsageQuota() {
@@ -908,47 +932,262 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun exportNotebookZip(notebookId: String, context: Context) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val notebook = notebookRepository.listAllNotebooks().find { it.id == notebookId } ?: return@launch
-                val cacheDir = context.cacheDir
-                val zipFile = File(cacheDir, "${notebook.name}_backup.zip")
-                notebookRepository.exportNotebookToZip(notebookId, zipFile)
+    // =========================================================================
+    // Direct JSON Export & Import Logic
+    // =========================================================================
 
-                withContext(Dispatchers.Main) {
-                    ExportSharingManager.shareFile(
-                        context = context,
-                        file = zipFile,
-                        mimeType = "application/zip",
+    fun prepareSingleNotebookExport(notebookId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val notebook = notebookRepository.listAllNotebooks().find { it.id == notebookId } ?: return@launch
+            val json = notebookRepository.exportNotebookToJsonString(notebookId)
+            val fileName = "${notebook.name}.json"
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    activeJsonExportTarget = JsonExportTarget(
+                        fileName = fileName,
+                        jsonContent = json,
                         title = "Notizbuch exportieren: ${notebook.name}"
                     )
-                }
-            } catch (e: Exception) {
-                Log.e("MainViewModel", "Error exporting notebook zip", e)
+                )
             }
         }
     }
 
-    fun importNotebookZip(uri: Uri, context: Context) {
+    fun prepareAllNotebooksCombinedExport() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val json = notebookRepository.exportNotebooksCombinedJsonString()
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    activeJsonExportTarget = JsonExportTarget(
+                        fileName = "Alle Notizbücher.json",
+                        jsonContent = json,
+                        title = "Alle Notizbücher exportieren"
+                    )
+                )
+            }
+        }
+    }
+
+    fun prepareSelectedNotebooksCombinedExport(selectedIds: List<String>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val json = notebookRepository.exportNotebooksCombinedJsonString(selectedIds)
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    isSelectNotebooksExportDialogOpen = false,
+                    activeJsonExportTarget = JsonExportTarget(
+                        fileName = "Ausgewählte Notizbücher.json",
+                        jsonContent = json,
+                        title = "Ausgewählte Notizbücher exportieren"
+                    )
+                )
+            }
+        }
+    }
+
+    fun openSelectNotebooksExportDialog() {
+        _uiState.value = _uiState.value.copy(isSelectNotebooksExportDialogOpen = true)
+    }
+
+    fun closeSelectNotebooksExportDialog() {
+        _uiState.value = _uiState.value.copy(isSelectNotebooksExportDialogOpen = false)
+    }
+
+    fun dismissJsonExportDialog() {
+        _uiState.value = _uiState.value.copy(activeJsonExportTarget = null)
+    }
+
+    fun executeSaveJsonToUri(uri: Uri, context: Context) {
+        val target = _uiState.value.activeJsonExportTarget ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val success = ExportSharingManager.saveJsonToUri(context, uri, target.jsonContent)
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(activeJsonExportTarget = null)
+                if (success) {
+                    _uiState.value = _uiState.value.copy(
+                        importStatusMessage = "Datei '${target.fileName}' erfolgreich gespeichert!"
+                    )
+                }
+            }
+        }
+    }
+
+    fun shareActiveJsonExport(context: Context) {
+        val target = _uiState.value.activeJsonExportTarget ?: return
+        ExportSharingManager.shareJsonContent(
+            context = context,
+            fileName = target.fileName,
+            jsonContent = target.jsonContent,
+            title = target.title
+        )
+        _uiState.value = _uiState.value.copy(activeJsonExportTarget = null)
+    }
+
+    fun setPendingTreeExport(notebookIds: List<String>?) {
+        _uiState.value = _uiState.value.copy(pendingTreeExportNotebookIds = notebookIds)
+    }
+
+    fun executeTreeExport(folderUri: Uri, context: Context, notebookIds: List<String> = emptyList()) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val count = notebookRepository.exportNotebooksToTreeUri(context, folderUri, notebookIds)
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    pendingTreeExportNotebookIds = null,
+                    isSelectNotebooksExportDialogOpen = false,
+                    importStatusMessage = "$count Notizbücher als separate JSON-Dateien exportiert!"
+                )
+            }
+        }
+    }
+
+    fun handleImportJsonUri(uri: Uri, context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    val imported = notebookRepository.importNotebookFromZip(stream)
-                    if (imported != null) {
+                val fileName = getFileNameFromUri(uri, context) ?: "Importiertes_Notizbuch.json"
+                val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                if (content.isNullOrBlank()) {
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = "Die ausgewählte Datei ist leer oder ungültig."
+                        )
+                    }
+                    return@launch
+                }
+
+                when (val result = notebookRepository.parseImportedJson(content, fileName)) {
+                    is ImportedJsonResult.SingleNotebook -> {
                         withContext(Dispatchers.Main) {
-                            selectNotebook(imported.id)
                             _uiState.value = _uiState.value.copy(
-                                isManageNotebooksDialogOpen = false,
-                                importStatusMessage = "Notizbuch '${imported.name}' erfolgreich importiert!"
+                                importSingleChoice = ImportSingleChoice(result.detectedName, result.words)
+                            )
+                        }
+                    }
+                    is ImportedJsonResult.MultipleNotebooks -> {
+                        withContext(Dispatchers.Main) {
+                            _uiState.value = _uiState.value.copy(
+                                importMultiChoice = ImportMultiChoice(
+                                    notebooksMap = result.notebooks,
+                                    fallbackName = fileName.removeSuffix(".json").removeSuffix(".JSON")
+                                )
+                            )
+                        }
+                    }
+                    is ImportedJsonResult.EmptyOrInvalid -> {
+                        withContext(Dispatchers.Main) {
+                            _uiState.value = _uiState.value.copy(
+                                errorMessage = "Keine gültigen Wörter in der JSON-Datei gefunden."
                             )
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.e("MainViewModel", "Error importing notebook zip", e)
+                Log.e("MainViewModel", "Error reading imported JSON", e)
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Fehler beim Lesen der Datei: ${e.localizedMessage}"
+                    )
+                }
             }
         }
+    }
+
+    fun dismissImportSingleChoice() {
+        _uiState.value = _uiState.value.copy(importSingleChoice = null)
+    }
+
+    fun dismissImportMultiChoice() {
+        _uiState.value = _uiState.value.copy(importMultiChoice = null)
+    }
+
+    fun executeImportSingleMerge() {
+        val choice = _uiState.value.importSingleChoice ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val merged = notebookRepository.importSingleNotebookMergeActive(choice.words)
+            repository.reloadRoomWithItems(merged)
+            val updatedAll = notebookRepository.listAllNotebooks()
+            val active = notebookRepository.getActiveNotebook()
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    importSingleChoice = null,
+                    allNotebooks = updatedAll,
+                    activeNotebook = active,
+                    importStatusMessage = "${choice.words.size} Wörter in '${active.name}' zusammengeführt!"
+                )
+            }
+        }
+    }
+
+    fun executeImportSingleAsNew(notebookName: String) {
+        val choice = _uiState.value.importSingleChoice ?: return
+        val nameToUse = notebookName.trim().ifBlank { choice.detectedName }
+        viewModelScope.launch(Dispatchers.IO) {
+            val newNotebook = notebookRepository.importSingleNotebookAsNew(nameToUse, choice.words)
+            val activeHistory = notebookRepository.loadActiveHistory()
+            repository.reloadRoomWithItems(activeHistory)
+            val updatedAll = notebookRepository.listAllNotebooks()
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    importSingleChoice = null,
+                    allNotebooks = updatedAll,
+                    activeNotebook = newNotebook,
+                    importStatusMessage = "Notizbuch '${newNotebook.name}' mit ${choice.words.size} Wörtern erstellt!"
+                )
+            }
+        }
+    }
+
+    fun executeImportMultiSeparate() {
+        val choice = _uiState.value.importMultiChoice ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val importedList = notebookRepository.importMultipleNotebooksSeparate(choice.notebooksMap)
+            val active = notebookRepository.getActiveNotebook()
+            val activeHistory = notebookRepository.loadActiveHistory()
+            repository.reloadRoomWithItems(activeHistory)
+            val updatedAll = notebookRepository.listAllNotebooks()
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    importMultiChoice = null,
+                    allNotebooks = updatedAll,
+                    activeNotebook = active,
+                    importStatusMessage = "${importedList.size} Notizbücher erfolgreich importiert!"
+                )
+            }
+        }
+    }
+
+    fun executeImportMultiAsSingle(notebookName: String) {
+        val choice = _uiState.value.importMultiChoice ?: return
+        val nameToUse = notebookName.trim().ifBlank { choice.fallbackName }
+        viewModelScope.launch(Dispatchers.IO) {
+            val allWords = choice.notebooksMap.values.flatten()
+            val newNotebook = notebookRepository.importMultipleNotebooksAsSingle(nameToUse, allWords)
+            val activeHistory = notebookRepository.loadActiveHistory()
+            repository.reloadRoomWithItems(activeHistory)
+            val updatedAll = notebookRepository.listAllNotebooks()
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    importMultiChoice = null,
+                    allNotebooks = updatedAll,
+                    activeNotebook = newNotebook,
+                    importStatusMessage = "Notizbuch '${newNotebook.name}' mit ${allWords.size} Wörtern erstellt!"
+                )
+            }
+        }
+    }
+
+    private fun getFileNameFromUri(uri: Uri, context: Context): String? {
+        var name: String? = null
+        if (uri.scheme == "content") {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val index = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index != -1) {
+                        name = it.getString(index)
+                    }
+                }
+            }
+        }
+        return name ?: uri.lastPathSegment
     }
 
     fun openCreateNotebookDialog() {

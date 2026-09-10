@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,7 +46,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.VerbConjugationResult
@@ -67,7 +68,6 @@ import com.example.ui.theme.GeoSecondaryContainer
 import com.example.ui.theme.GeoSurface
 import com.example.ui.theme.GeoSurfaceVariant
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VerbConjugationResultView(
     result: VerbConjugationResult,
@@ -144,49 +144,115 @@ fun VerbConjugationResultView(
                     }
                 }
 
-                // Row 2: Grammatical Details for verbs (14sp, On Surface, left-aligned)
-                val verbDetails = buildString {
-                    append("Verb")
-                    if (result.hilfsverb.isNotBlank()) {
-                        append(" · Hilfsverb: ")
-                        append(result.hilfsverb)
-                    }
-                    if (result.partizip2.isNotBlank()) {
-                        append(" · Partizip II: ")
-                        append(result.partizip2)
-                    }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = verbDetails,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontSize = 14.sp,
-                    color = GeoOnSurfaceVariant,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 19.sp,
-                    maxLines = 2
-                )
-
-                // Partizip I and Partizip II Badges (if available)
-                if (result.partizip1.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                // Row 2: Auxiliary Verb (own row, blue badge + normal verb text)
+                val auxVerb = result.hilfsverb.trim().ifBlank { "haben" }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("verb_auxiliary_row"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF2196F3))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .testTag("verb_auxiliary_badge")
                     ) {
-                        PartizipPill(
-                            label = "Partizip I",
-                            form = result.partizip1,
-                            onSpeak = onSpeak
+                        Text(
+                            text = "Hilfsverb:",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                letterSpacing = 0.3.sp
+                            ),
+                            color = Color.White,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                    Text(
+                        text = auxVerb,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = GeoOnSurface,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.testTag("verb_auxiliary_text")
+                    )
+                }
+
+                // Row 3: Partizip I · Partizip II (own row, no audio icon, horizontally scrollable, no wrapping)
+                val p1 = result.partizip1.trim().ifBlank {
+                    if (result.infinitiv.isNotBlank()) {
+                        if (result.infinitiv.endsWith("d", ignoreCase = true)) result.infinitiv else "${result.infinitiv}d"
+                    } else ""
+                }
+                val p2 = result.partizip2.trim()
+
+                if (p1.isNotBlank() || p2.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val partizipScrollState = rememberScrollState()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(partizipScrollState)
+                            .testTag("verb_partizip_row"),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = buildAnnotatedString {
+                                var hasPrev = false
+                                if (p1.isNotBlank()) {
+                                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = GeoOnSurface)) {
+                                        append("Partizip I: ")
+                                    }
+                                    withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = GeoOnSurfaceVariant)) {
+                                        append(p1)
+                                    }
+                                    hasPrev = true
+                                }
+                                if (p2.isNotBlank()) {
+                                    if (hasPrev) {
+                                        withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = GeoOnSurfaceVariant)) {
+                                            append(" · ")
+                                        }
+                                    }
+                                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = GeoOnSurface)) {
+                                        append("Partizip II: ")
+                                    }
+                                    withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = GeoOnSurfaceVariant)) {
+                                        append(p2)
+                                    }
+                                }
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
 
-                // Row 3: English Translation (14sp, On Surface, left-aligned)
-                if (result.meaningEnglish.isNotBlank()) {
+                // Row 4: English Translation (own row, with translation prefix Eng.:)
+                val englishMeaning = remember(result.meaningEnglish) {
+                    val raw = result.meaningEnglish.trim()
+                    when {
+                        raw.startsWith("Eng.:", ignoreCase = true) -> raw.substringAfter("Eng.:").trim()
+                        raw.startsWith("Eng:", ignoreCase = true) -> raw.substringAfter("Eng:").trim()
+                        raw.startsWith("English:", ignoreCase = true) -> raw.substringAfter("English:").trim()
+                        else -> raw
+                    }
+                }
+                if (englishMeaning.isNotBlank()) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("verb_translation_row"),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -205,7 +271,7 @@ fun VerbConjugationResultView(
                             )
                         }
                         Text(
-                            text = "English: ${result.meaningEnglish}",
+                            text = "Eng.: $englishMeaning",
                             style = MaterialTheme.typography.bodyMedium,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
@@ -310,51 +376,6 @@ fun VerbConjugationResultView(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun PartizipPill(
-    label: String,
-    form: String,
-    onSpeak: (String) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(GeoSurfaceVariant)
-            .border(1.dp, GeoBorder, RoundedCornerShape(8.dp))
-            .clickable { onSpeak(form) }
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            text = "$label:",
-            fontSize = 11.sp,
-            color = GeoOnSurfaceVariant,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            softWrap = false
-        )
-        Box(modifier = Modifier.wrapContentWidth()) {
-            DynamicTextView(
-                text = form,
-                minTextSize = 9f,
-                maxTextSize = 13f,
-                paddingStart = 2.dp,
-                paddingEnd = 6.dp,
-                color = GeoPrimary,
-                fontWeight = FontWeight.Bold,
-                textStyle = MaterialTheme.typography.bodySmall
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-            contentDescription = "Speak $form",
-            tint = Color(0xFF9E9E9E),
-            modifier = Modifier.size(13.dp)
-        )
     }
 }
 

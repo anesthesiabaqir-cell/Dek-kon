@@ -1,53 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Base Theme -->
-    <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <style name="Theme.MyApplication" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F5F7F7</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 
     <!-- Schiefer (Default / Cool Earth) -->
-    <style name="Theme.Deklinatio.Schiefer" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.Deklinatio.Schiefer" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">#4B5B5B</item>
         <item name="android:colorSecondary">#607272</item>
         <item name="android:windowBackground">#F5F7F7</item>
         <item name="android:textColorPrimary">#151D1D</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
     <!-- 1. Violett (Classic) -->
-    <style name="Theme.Deklinatio.Violet" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.Deklinatio.Violet" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">#7C3AED</item>
         <item name="android:colorSecondary">#A78BFA</item>
         <item name="android:windowBackground">#F5F3FF</item>
         <item name="android:textColorPrimary">#1E1B4B</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
     <!-- 2. Tiefblau (Deep Blue) -->
-    <style name="Theme.Deklinatio.DeepBlue" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.Deklinatio.DeepBlue" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">#1A365D</item>
         <item name="android:colorSecondary">#2563EB</item>
         <item name="android:windowBackground">#F8FAFC</item>
         <item name="android:textColorPrimary">#0F172A</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
     <!-- 3. Olivgrün (Olive Green) -->
-    <style name="Theme.Deklinatio.OliveGreen" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.Deklinatio.OliveGreen" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">#14532D</item>
         <item name="android:colorSecondary">#16A34A</item>
         <item name="android:windowBackground">#FAFAF8</item>
         <item name="android:textColorPrimary">#1C1917</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
     <!-- 4. Türkis (Modern Turquoise) -->
-    <style name="Theme.Deklinatio.Turquoise" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.Deklinatio.Turquoise" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">#155E75</item>
         <item name="android:colorSecondary">#06B6D4</item>
         <item name="android:windowBackground">#ECFEFF</item>
         <item name="android:textColorPrimary">#164E63</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
     <!-- 5. Karminrot (Crimson Red) -->
-    <style name="Theme.Deklinatio.CrimsonRed" parent="android:Theme.DeviceDefault.NoActionBar">
+    <style name="Theme.Deklinatio.CrimsonRed" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">#7F1D1D</item>
         <item name="android:colorSecondary">#B91C1C</item>
         <item name="android:windowBackground">#FEF2F2</item>
         <item name="android:textColorPrimary">#1F2937</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>
