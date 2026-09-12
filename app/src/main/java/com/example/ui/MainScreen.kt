@@ -103,6 +103,7 @@ import com.example.ui.components.ImportSingleChoiceDialog
 import com.example.ui.components.JsonExportActionDialog
 import com.example.ui.components.NotebookManagerDialog
 import com.example.ui.components.NotebookSwitcher
+import com.example.ui.components.PostImportApiKeyDialog
 import com.example.ui.components.PrintExportDialog
 import com.example.ui.components.SelectNotebooksExportDialog
 import com.example.ui.components.SprechTempoControl
@@ -220,7 +221,8 @@ fun MainScreen(
                             allNotebooks = uiState.allNotebooks,
                             onSelectNotebook = { viewModel.selectNotebook(it) },
                             onCreateNotebookClick = { viewModel.openCreateNotebookDialog() },
-                            onManageNotebooksClick = { viewModel.openManageNotebooksDialog() }
+                            onManageNotebooksClick = { viewModel.openManageNotebooksDialog() },
+                            appLanguage = uiState.appLanguage
                         )
                     },
                     navigationIcon = {
@@ -710,7 +712,9 @@ fun MainScreen(
             },
             themeMode = uiState.themeMode,
             onThemeModeChange = { mode -> viewModel.onThemeModeSelected(mode) },
-            onOpenNotebookManager = { viewModel.onOpenNotebookManagerFromSettings() }
+            onOpenNotebookManager = { viewModel.onOpenNotebookManagerFromSettings() },
+            appLanguage = uiState.appLanguage,
+            onAppLanguageSelected = { lang -> viewModel.onAppLanguageSelected(lang) }
         )
     }
 
@@ -720,7 +724,8 @@ fun MainScreen(
             onDismiss = { viewModel.closeCreateNotebookDialog() },
             onCreate = { name, themeColorId, themeMode ->
                 viewModel.createNotebook(name, themeColorId, themeMode)
-            }
+            },
+            appLanguage = uiState.appLanguage
         )
     }
 
@@ -759,7 +764,8 @@ fun MainScreen(
             },
             onExportSelectedClick = {
                 viewModel.openSelectNotebooksExportDialog()
-            }
+            },
+            appLanguage = uiState.appLanguage
         )
     }
 
@@ -776,7 +782,8 @@ fun MainScreen(
             },
             onDismiss = {
                 viewModel.dismissJsonExportDialog()
-            }
+            },
+            appLanguage = uiState.appLanguage
         )
     }
 
@@ -793,7 +800,8 @@ fun MainScreen(
                 viewModel.closeSelectNotebooksExportDialog()
                 viewModel.setPendingTreeExport(selectedIds)
                 treeFolderLauncher.launch(null)
-            }
+            },
+            appLanguage = uiState.appLanguage
         )
     }
 
@@ -810,7 +818,8 @@ fun MainScreen(
             },
             onDismiss = {
                 viewModel.dismissImportSingleChoice()
-            }
+            },
+            appLanguage = uiState.appLanguage
         )
     }
 
@@ -828,7 +837,27 @@ fun MainScreen(
             },
             onDismiss = {
                 viewModel.dismissImportMultiChoice()
-            }
+            },
+            appLanguage = uiState.appLanguage
+        )
+    }
+
+    // Post-Import API Key Configuration Dialog
+    uiState.postImportApiKeyPrompt?.let { prompt ->
+        PostImportApiKeyDialog(
+            notebookName = prompt.notebookName,
+            provider = prompt.provider,
+            modelId = prompt.modelId,
+            onSaveApiKey = { key ->
+                viewModel.savePostImportApiKey(key)
+            },
+            onOpenFullSettings = {
+                viewModel.openSettingsFromPostImport()
+            },
+            onSkip = {
+                viewModel.dismissPostImportApiKeyPrompt()
+            },
+            appLanguage = uiState.appLanguage
         )
     }
 
@@ -845,6 +874,7 @@ fun MainScreen(
             verbHistory = verbs,
             initialScope = initialScope,
             notebookName = uiState.activeNotebook?.name ?: "",
+            appLanguage = uiState.appLanguage,
             onDismiss = { viewModel.onCloseExportDialog() }
         )
     }

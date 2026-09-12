@@ -22,11 +22,13 @@ data class NotebookSettings(
     val bodyColorHex: String = "#1F2937",
     val headerColorHex: String = "#1E3A8A",
     val fontFamilyName: String = "Roboto",
-    val storageFolderUri: String = ""
+    val storageFolderUri: String = "",
+    val appLanguage: String = "de"
 ) {
     fun toJson(): String {
         val root = JSONObject()
         root.put("notebookName", notebookName)
+        root.put("appLanguage", appLanguage)
 
         val themeObj = JSONObject()
         themeObj.put("selectedColor", themeColorId)
@@ -61,7 +63,72 @@ data class NotebookSettings(
         return root.toString(2)
     }
 
+    /**
+     * Serializes notebook settings for export files (Full Backup).
+     * Strictly EXCLUDES API keys and storage folder path for security & portability.
+     */
+    fun toExportSettingsJson(): JSONObject {
+        val obj = JSONObject()
+        obj.put("themeColorId", themeColorId)
+        obj.put("themeMode", themeMode)
+        obj.put("appLanguage", appLanguage)
+        obj.put("selectedProvider", selectedProvider)
+        obj.put("selectedModel", selectedModel)
+        obj.put("ttsSpeed", ttsSpeed.toDouble())
+        obj.put("bodyFontSize", bodyFontSize.toDouble())
+        obj.put("headerFontSize", headerFontSize.toDouble())
+        obj.put("bodyColorHex", bodyColorHex)
+        obj.put("headerColorHex", headerColorHex)
+        obj.put("fontFamilyName", fontFamilyName)
+        obj.put("dailyRequestsRemaining", dailyRequestsRemaining)
+        obj.put("totalDailyQuota", totalDailyQuota)
+        // API keys (customApiKey, openRouterApiKey) and storageFolderUri are intentionally excluded
+        return obj
+    }
+
     companion object {
+        /**
+         * Parses settings from an exported settings object.
+         * Handles both flat export schema and nested settings.json schema.
+         * Guarantees API keys and device storage URIs remain blank.
+         */
+        fun parseFromExportSettingsJson(obj: JSONObject, fallbackName: String = "Allgemein"): NotebookSettings {
+            return try {
+                if (obj.has("theme") || obj.has("ai")) {
+                    // Nested format (from raw settings.json)
+                    val base = fromJson(obj.toString(), fallbackName)
+                    base.copy(
+                        customApiKey = "",
+                        openRouterApiKey = "",
+                        storageFolderUri = ""
+                    )
+                } else {
+                    // Flat export package format
+                    NotebookSettings(
+                        notebookName = fallbackName,
+                        themeColorId = obj.optString("themeColorId", "Schiefer"),
+                        themeMode = obj.optString("themeMode", "auto"),
+                        selectedProvider = obj.optString("selectedProvider", "GEMINI"),
+                        selectedModel = obj.optString("selectedModel", "gemini-2.5-flash-latest"),
+                        customApiKey = "", // Excluded from export
+                        openRouterApiKey = "", // Excluded from export
+                        storageFolderUri = "", // Excluded from export
+                        dailyRequestsRemaining = obj.optInt("dailyRequestsRemaining", 20),
+                        totalDailyQuota = obj.optInt("totalDailyQuota", 20),
+                        ttsSpeed = obj.optDouble("ttsSpeed", 1.0).toFloat(),
+                        bodyFontSize = obj.optDouble("bodyFontSize", 9.0).toFloat(),
+                        headerFontSize = obj.optDouble("headerFontSize", 10.5).toFloat(),
+                        bodyColorHex = obj.optString("bodyColorHex", "#1F2937"),
+                        headerColorHex = obj.optString("headerColorHex", "#1E3A8A"),
+                        fontFamilyName = obj.optString("fontFamilyName", "Roboto"),
+                        appLanguage = obj.optString("appLanguage", "de")
+                    )
+                }
+            } catch (e: Exception) {
+                NotebookSettings(notebookName = fallbackName)
+            }
+        }
+
         fun fromJson(jsonString: String, fallbackName: String = "Allgemein"): NotebookSettings {
             return try {
                 val root = JSONObject(jsonString)
@@ -102,6 +169,8 @@ data class NotebookSettings(
                 val storageFolderUri = storageObj?.optString("folderUri", "")
                     ?: root.optString("storageFolderUri", "")
 
+                val appLanguage = root.optString("appLanguage", "de").ifBlank { "de" }
+
                 NotebookSettings(
                     notebookName = notebookName,
                     themeColorId = themeColorId,
@@ -118,7 +187,8 @@ data class NotebookSettings(
                     bodyColorHex = bodyColorHex,
                     headerColorHex = headerColorHex,
                     fontFamilyName = fontFamilyName,
-                    storageFolderUri = storageFolderUri
+                    storageFolderUri = storageFolderUri,
+                    appLanguage = appLanguage
                 )
             } catch (e: Exception) {
                 NotebookSettings(notebookName = fallbackName)
@@ -137,3 +207,13 @@ data class Notebook(
     val wordCount: Int = 0,
     val settings: NotebookSettings = NotebookSettings(notebookName = name)
 )
+
+/**
+ * Encapsulates a parsed notebook package from an export file.
+ */
+data class ImportedNotebookPackage(
+    val name: String,
+    val words: List<com.example.data.local.WordHistoryEntity>,
+    val settings: NotebookSettings? = null
+)
+

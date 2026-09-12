@@ -1,0 +1,47 @@
+<resources>
+    <string name="app_name">تصريف وتصريف الأفعال</string>
+    <string name="export_dialog_title">تصدير وسجل البحث</string>
+    <string name="export_dialog_subtitle">تنزيل ومشاركة PDF و Excel (.xlsx)</string>
+    <string name="export_section_share">مشاركة مباشرة عبر تطبيقات أخرى:</string>
+    <string name="export_section_download">تنزيل إلى الجهاز:</string>
+    <string name="export_button_share_excel">Excel (.xlsx)</string>
+    <string name="export_button_share_pdf">تصدير PDF</string>
+    <string name="export_button_download_excel">حفظ Excel</string>
+    <string name="export_button_download_pdf">حفظ PDF</string>
+    <string name="export_button_print_pdf">طباعة ونظام PDF</string>
+    <string name="export_button_close">إغلاق</string>
+
+    <!-- Settings dialog labels -->
+    <string name="settings_active_provider_test">اختبار المفتاح</string>
+    <string name="settings_daily_quota_title">الحد اليومي:</string>
+    <string name="settings_quota_notice">الحد اليومي: 50 طلباً</string>
+
+    <!-- Search Placeholders -->
+    <string name="search_placeholder_noun">بحث عن الأسماء</string>
+    <string name="search_placeholder_verb">بحث عن الأفعال</string>
+
+    <!-- History Section -->
+    <string name="history_title">سجل البحث</string>
+    <string name="history_search_hint">البحث في السجل</string>
+    <string name="history_clear_button">مسح</string>
+    <!-- Speech Tempo -->
+    <string name="speech_tempo_title">سرعة النطق</string>
+
+    <!-- Color Picker Dialog -->
+    <string name="color_picker_title">اختيار اللون</string>
+    <string name="color_picker_tab_palette">لوحة الألوان</string>
+    <string name="color_picker_tab_wheel">عجلة الألوان</string>
+    <string name="color_picker_standard_colors">الألوان القياسية:</string>
+    <string name="color_picker_custom_colors">الألوان المخصصة:</string>
+    <string name="color_picker_no_custom_colors">لا توجد ألوان مخصصة بعد</string>
+    <string name="color_picker_add_custom_color">إضافة لون مخصص:</string>
+    <string name="color_picker_add_button">إضافة</string>
+    <string name="color_picker_saturation">التشبع</string>
+    <string name="color_picker_brightness">السطوع</string>
+    <string name="color_picker_cancel">إلغاء</string>
+    <string name="color_picker_apply">تطبيق</string>
+    <string name="color_picker_invalid_hex">رمز سداسي غير صالح</string>
+    <string name="color_picker_delete_title">حذف اللون</string>
+    <string name="color_picker_delete_message">هل تريد حقاً حذف هذا اللون؟</string>
+    <string name="color_picker_delete_confirm">حذف</string>
+</resources>

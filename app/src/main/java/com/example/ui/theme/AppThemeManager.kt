@@ -905,6 +905,7 @@ class ThemePreferences(context: Context) {
     companion object {
         private const val KEY_SELECTED_THEME = "selected_theme"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_APP_LANGUAGE = "app_language"
     }
 
     fun getSelectedTheme(): AppThemePackage {
@@ -922,5 +923,13 @@ class ThemePreferences(context: Context) {
 
     fun saveThemeMode(mode: String) {
         prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    fun getAppLanguage(): String {
+        return prefs.getString(KEY_APP_LANGUAGE, "de") ?: "de"
+    }
+
+    fun saveAppLanguage(languageCode: String) {
+        prefs.edit().putString(KEY_APP_LANGUAGE, languageCode).apply()
     }
 }

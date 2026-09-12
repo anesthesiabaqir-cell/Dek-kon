@@ -59,13 +59,13 @@ class DeclensionHistoryExportHelperTest {
 
         val r1 = rows[0]
         assertEquals("das Schloss", r1.nomenSingular)
-        assertEquals("die Schlösser", r1.plural)
+        assertEquals("Neutrum", r1.genus)
         assertEquals("castle / lock", r1.englishTranslation)
         assertTrue(r1.nominativ.contains("das Schloss") && r1.nominativ.contains("die Schlösser"))
         assertTrue(r1.akkusativ.contains("das Schloss") && r1.akkusativ.contains("die Schlösser"))
         assertTrue(r1.genitiv.contains("des Schlosses") || r1.genitiv.contains("Schloss"))
         assertTrue(r1.dativ.contains("dem Schloss") && r1.dativ.contains("den Schlossn"))
-        assertEquals("Neutrum", r1.genus)
+        assertEquals(7, r1.toList().size)
     }
 
     @Test
@@ -92,17 +92,16 @@ class DeclensionHistoryExportHelperTest {
 
             assertTrue(sheetContent.contains("Nr."))
             assertTrue(sheetContent.contains("Nomen (Singular)"))
-            assertTrue(sheetContent.contains("Plural"))
+            assertTrue(sheetContent.contains("Genus"))
             assertTrue(sheetContent.contains("English translation"))
             assertTrue(sheetContent.contains("Nominativ (Sg./Pl.)"))
             assertTrue(sheetContent.contains("Akkusativ (Sg./Pl.)"))
             assertTrue(sheetContent.contains("Genitiv (Sg./Pl.)"))
             assertTrue(sheetContent.contains("Dativ (Sg./Pl.)"))
+            org.junit.Assert.assertFalse(sheetContent.contains("<is><t>Plural</t></is>"))
             org.junit.Assert.assertFalse(sheetContent.contains("Ablativ"))
-            assertTrue(sheetContent.contains("Genus"))
             assertTrue(sheetContent.contains("autoFilter"))
             assertTrue(sheetContent.contains("das Schloss"))
-            assertTrue(sheetContent.contains("die Schlösser"))
 
             // Verify workbook sheet name matches custom title
             val workbookEntry = zip.getEntry("xl/workbook.xml")
@@ -123,12 +122,12 @@ class DeclensionHistoryExportHelperTest {
         assertTrue(html.contains("<h1>$customTitle</h1>"))
         org.junit.Assert.assertFalse(html.contains("class=\"subtitle\""))
         org.junit.Assert.assertFalse(html.contains("Horizontale Übersicht der gesuchten Nomen"))
-        assertTrue(html.contains("Nomen (Singular)"))
-        assertTrue(html.contains("Plural"))
-        assertTrue(html.contains("English translation"))
+        assertTrue(html.contains("<th>Nomen (Singular)</th>"))
+        assertTrue(html.contains("<th>Genus</th>"))
+        assertTrue(html.contains("<th>English translation</th>"))
+        org.junit.Assert.assertFalse(html.contains("<th>Plural</th>"))
         org.junit.Assert.assertFalse(html.contains("Ablativ"))
         assertTrue(html.contains("das Schloss"))
-        assertTrue(html.contains("die Schlösser"))
         assertTrue(html.contains("castle / lock"))
     }
 

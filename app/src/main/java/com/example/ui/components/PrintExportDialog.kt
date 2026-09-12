@@ -1,13 +1,23 @@
 package com.example.ui.components
 
 import android.net.Uri
+import android.view.View
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,41 +26,69 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,24 +96,46 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.example.data.model.WordDeclensionResult
+import com.example.ui.i18n.AppStrings
 import com.example.ui.theme.GeoBorder
 import com.example.ui.theme.GeoOnSurface
 import com.example.ui.theme.GeoOnSurfaceVariant
 import com.example.ui.theme.GeoPrimary
 import com.example.ui.theme.GeoSurface
 import com.example.ui.theme.GeoSurfaceVariant
+import com.example.util.CustomColorManager
 import com.example.util.DeclensionHistoryExportHelper
 import com.example.util.ExportSharingManager
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -103,6 +163,7 @@ fun PrintExportDialog(
     initialScope: DeclensionHistoryExportHelper.ExportScope = DeclensionHistoryExportHelper.ExportScope.ALLE,
     notebookName: String = "",
     registerName: String = notebookName,
+    appLanguage: String = "",
     onDismiss: () -> Unit
 ) {
     val effectiveNotebookName = notebookName.ifBlank { registerName }
@@ -140,9 +201,9 @@ fun PrintExportDialog(
     var headerFontSize by remember { mutableStateOf(14f) }
     var headerFontColorHex by remember { mutableStateOf("#000000") }
 
-    // Dialogs for color picker & custom size
+    // Dialogs for color picker & font size bottom sheet
     var activeColorTarget by remember { mutableStateOf<String?>(null) } // "body" or "header"
-    var activeCustomSizeTarget by remember { mutableStateOf<String?>(null) } // "body" or "header"
+    var activeFontSizeTarget by remember { mutableStateOf<String?>(null) } // "body" or "header"
 
     val currentTypography = remember(
         bodyFontSize, bodyFontFamily, bodyFontColorHex,
@@ -529,8 +590,7 @@ fun PrintExportDialog(
                     currentFont = bodyFontFamily,
                     onFontSelected = { bodyFontFamily = it },
                     currentSize = bodyFontSize,
-                    onSizeSelected = { bodyFontSize = it },
-                    onCustomSizeRequested = { activeCustomSizeTarget = "body" },
+                    onSizeSelectorClicked = { activeFontSizeTarget = "body" },
                     currentColorHex = bodyFontColorHex,
                     onColorPickerRequested = { activeColorTarget = "body" },
                     testTagPrefix = "body"
@@ -542,8 +602,7 @@ fun PrintExportDialog(
                     currentFont = headerFontFamily,
                     onFontSelected = { headerFontFamily = it },
                     currentSize = headerFontSize,
-                    onSizeSelected = { headerFontSize = it },
-                    onCustomSizeRequested = { activeCustomSizeTarget = "header" },
+                    onSizeSelectorClicked = { activeFontSizeTarget = "header" },
                     currentColorHex = headerFontColorHex,
                     onColorPickerRequested = { activeColorTarget = "header" },
                     testTagPrefix = "header"
@@ -714,6 +773,7 @@ fun PrintExportDialog(
         val initialColor = if (activeColorTarget == "body") bodyFontColorHex else headerFontColorHex
         ColorPickerDialog(
             initialColorHex = initialColor,
+            appLanguage = appLanguage,
             onColorChosen = { chosenHex ->
                 if (activeColorTarget == "body") {
                     bodyFontColorHex = chosenHex
@@ -726,20 +786,20 @@ fun PrintExportDialog(
         )
     }
 
-    // Custom Font Size Dialog
-    if (activeCustomSizeTarget != null) {
-        val currentSz = if (activeCustomSizeTarget == "body") bodyFontSize else headerFontSize
-        CustomSizeDialog(
+    // Font Size Picker Centered Dialog
+    if (activeFontSizeTarget != null) {
+        val currentSz = if (activeFontSizeTarget == "body") bodyFontSize else headerFontSize
+        FontSizePickerDialog(
             initialSize = currentSz,
-            onSizeConfirmed = { newSz ->
-                if (activeCustomSizeTarget == "body") {
+            onSizeSelected = { newSz ->
+                if (activeFontSizeTarget == "body") {
                     bodyFontSize = newSz
                 } else {
                     headerFontSize = newSz
                 }
-                activeCustomSizeTarget = null
+                activeFontSizeTarget = null
             },
-            onDismiss = { activeCustomSizeTarget = null }
+            onDismiss = { activeFontSizeTarget = null }
         )
     }
 }
@@ -753,14 +813,12 @@ private fun TypographyConfigCard(
     currentFont: String,
     onFontSelected: (String) -> Unit,
     currentSize: Float,
-    onSizeSelected: (Float) -> Unit,
-    onCustomSizeRequested: () -> Unit,
+    onSizeSelectorClicked: () -> Unit,
     currentColorHex: String,
     onColorPickerRequested: () -> Unit,
     testTagPrefix: String
 ) {
     var fontDropdownExpanded by remember { mutableStateOf(false) }
-    var sizeDropdownExpanded by remember { mutableStateOf(false) }
 
     val colorInt = remember(currentColorHex) {
         DeclensionHistoryExportHelper.parseHexColor(currentColorHex)
@@ -847,71 +905,34 @@ private fun TypographyConfigCard(
                 }
             }
 
-            // Font Size Dropdown
-            Box(modifier = Modifier.weight(1f)) {
-                val sizeDisplay = if (currentSize % 1.0f == 0.0f) "${currentSize.toInt()} pt" else "$currentSize pt"
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(30.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(GeoSurface)
-                        .border(0.5.dp, GeoBorder, RoundedCornerShape(6.dp))
-                        .clickable { sizeDropdownExpanded = true }
-                        .padding(horizontal = 8.dp)
-                        .testTag("${testTagPrefix}_size_selector"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = sizeDisplay,
-                        fontSize = 11.5.sp,
-                        color = GeoOnSurface,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        tint = GeoOnSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = sizeDropdownExpanded,
-                    onDismissRequest = { sizeDropdownExpanded = false }
-                ) {
-                    DeclensionHistoryExportHelper.PREDEFINED_FONT_SIZES.forEach { sz ->
-                        val szLabel = if (sz % 1.0f == 0.0f) "${sz.toInt()} pt" else "$sz pt"
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = szLabel,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (sz == currentSize) FontWeight.Bold else FontWeight.Normal
-                                )
-                            },
-                            onClick = {
-                                onSizeSelected(sz)
-                                sizeDropdownExpanded = false
-                            }
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Benutzerdefiniert...", fontSize = 12.sp, color = GeoPrimary)
-                            }
-                        },
-                        onClick = {
-                            sizeDropdownExpanded = false
-                            onCustomSizeRequested()
-                        }
-                    )
-                }
+            // Font Size Selector (Triggers Bottom Sheet)
+            val sizeDisplay = if (currentSize % 1.0f == 0.0f) "${currentSize.toInt()} pt" else "$currentSize pt"
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(30.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(GeoSurface)
+                    .border(0.5.dp, GeoBorder, RoundedCornerShape(6.dp))
+                    .clickable { onSizeSelectorClicked() }
+                    .padding(horizontal = 8.dp)
+                    .testTag("${testTagPrefix}_size_selector"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = sizeDisplay,
+                    fontSize = 11.5.sp,
+                    color = GeoOnSurface,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = GeoOnSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
 
@@ -959,201 +980,1272 @@ private fun TypographyConfigCard(
 }
 
 /**
- * Color picker dialog offering 20 predefined colors and manual hex input.
+ * Interactive color wheel canvas component for adjusting Hue independently.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ColorPickerDialog(
-    initialColorHex: String,
-    onColorChosen: (String) -> Unit,
-    onDismiss: () -> Unit
+private fun InteractiveColorWheel(
+    hue: Float,
+    saturation: Float,
+    brightness: Float,
+    onColorChanged: (hue: Float, saturation: Float) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var hexInput by remember { mutableStateOf(initialColorHex.trim()) }
-    val parsedColorInt = remember(hexInput) {
-        DeclensionHistoryExportHelper.parseHexColor(hexInput)
+    val rainbowColors = remember {
+        listOf(
+            Color.Red,
+            Color.Yellow,
+            Color.Green,
+            Color.Cyan,
+            Color.Blue,
+            Color.Magenta,
+            Color.Red
+        )
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = GeoSurface,
-            tonalElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth(0.92f)
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "Farbe auswählen",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GeoOnSurface,
-                    maxLines = 1
-                )
+    val borderColor = GeoBorder
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val strokeWidthPx = remember(density) { with(density) { 1.5.dp.toPx() } }
+    val markerOuterRadiusPx = remember(density) { with(density) { 7.dp.toPx() } }
+    val markerOuterStrokePx = remember(density) { with(density) { 2.dp.toPx() } }
+    val markerInnerRadiusPx = remember(density) { with(density) { 4.5.dp.toPx() } }
+    val markerInnerStrokePx = remember(density) { with(density) { 1.5.dp.toPx() } }
 
-                // 20 predefined color swatches (FlowRow of 5 items per row)
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    maxItemsInEachRow = 5
-                ) {
-                    DeclensionHistoryExportHelper.PREDEFINED_COLORS.forEach { (name, hex) ->
-                        val isSelected = hex.equals(hexInput.trim(), ignoreCase = true)
-                        val colorVal = Color(android.graphics.Color.parseColor(hex))
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(colorVal)
-                                .border(
-                                    width = if (isSelected) 2.5.dp else 1.dp,
-                                    color = if (isSelected) GeoPrimary else GeoBorder,
-                                    shape = CircleShape
-                                )
-                                .clickable { hexInput = hex }
-                                .testTag("color_swatch_$name"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isSelected) {
-                                val checkTint = if (hex == "#FFFFFF" || hex == "#FFFF00" || hex == "#00FFFF") Color.Black else Color.White
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = checkTint,
-                                    modifier = Modifier.size(16.dp)
-                                )
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        val centerX = size.width / 2f
+                        val centerY = size.height / 2f
+                        val radius = minOf(centerX, centerY) - strokeWidthPx
+                        if (radius > 0f) {
+                            val dx = offset.x - centerX
+                            val dy = offset.y - centerY
+                            val dist = hypot(dx, dy)
+                            val sat = (dist / radius).coerceIn(0f, 1f)
+                            val newHue = if (dist > 0.5f) {
+                                val radAngle = atan2(dy.toDouble(), dx.toDouble())
+                                ((Math.toDegrees(radAngle) + 360.0) % 360.0).toFloat()
+                            } else {
+                                hue
                             }
+                            onColorChanged(newHue, sat)
                         }
                     }
                 }
-
-                // Manual Hex Input Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Preview Swatch
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(parsedColorInt))
-                            .border(1.dp, GeoBorder, RoundedCornerShape(6.dp))
-                    )
-
-                    OutlinedTextField(
-                        value = hexInput,
-                        onValueChange = { hexInput = it.take(9) },
-                        label = { Text("Hex-Code (#RRGGBB)", fontSize = 11.sp) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GeoPrimary,
-                            unfocusedBorderColor = GeoBorder
-                        )
-                    )
-                }
-
-                // Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Abbrechen", fontSize = 12.sp, color = GeoOnSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Button(
-                        onClick = {
-                            val clean = if (hexInput.startsWith("#")) hexInput else "#$hexInput"
-                            onColorChosen(clean)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = GeoPrimary)
-                    ) {
-                        Text("Übernehmen", fontSize = 12.sp, color = Color.White)
+                .pointerInput(Unit) {
+                    detectDragGestures { change, _ ->
+                        change.consume()
+                        val centerX = size.width / 2f
+                        val centerY = size.height / 2f
+                        val radius = minOf(centerX, centerY) - strokeWidthPx
+                        if (radius > 0f) {
+                            val dx = change.position.x - centerX
+                            val dy = change.position.y - centerY
+                            val dist = hypot(dx, dy)
+                            val sat = (dist / radius).coerceIn(0f, 1f)
+                            val newHue = if (dist > 0.5f) {
+                                val radAngle = atan2(dy.toDouble(), dx.toDouble())
+                                ((Math.toDegrees(radAngle) + 360.0) % 360.0).toFloat()
+                            } else {
+                                hue
+                            }
+                            onColorChanged(newHue, sat)
+                        }
                     }
                 }
+        ) {
+            val centerX = size.width / 2f
+            val centerY = size.height / 2f
+            val radius = minOf(centerX, centerY) - strokeWidthPx
+
+            // 1. Draw Hue Sweep Gradient (Full 360° Color Spectrum)
+            drawCircle(
+                brush = Brush.sweepGradient(
+                    colors = rainbowColors,
+                    center = Offset(centerX, centerY)
+                ),
+                radius = radius,
+                center = Offset(centerX, centerY)
+            )
+
+            // 2. Draw Radial Saturation Gradient (Center is White, Outer Edge is Transparent)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.White, Color.Transparent),
+                    center = Offset(centerX, centerY),
+                    radius = radius
+                ),
+                radius = radius,
+                center = Offset(centerX, centerY)
+            )
+
+            // 3. Draw Brightness Dimming Overlay (darkens proportionally to Brightness slider)
+            if (brightness < 1.0f) {
+                drawCircle(
+                    color = Color.Black.copy(alpha = (1f - brightness).coerceIn(0f, 1f)),
+                    radius = radius,
+                    center = Offset(centerX, centerY)
+                )
             }
+
+            // 4. Draw Outer Border Ring
+            drawCircle(
+                color = borderColor,
+                radius = radius,
+                center = Offset(centerX, centerY),
+                style = Stroke(width = strokeWidthPx)
+            )
+
+            // 5. Calculate Reticle Marker Position from Hue angle and Saturation radius
+            val rad = Math.toRadians(hue.toDouble())
+            val markerDist = radius * saturation.coerceIn(0f, 1f)
+            val markerX = (centerX + markerDist * cos(rad)).toFloat()
+            val markerY = (centerY + markerDist * sin(rad)).toFloat()
+            val markerOffset = Offset(markerX, markerY)
+
+            // 6. Draw High-Contrast Reticle Marker (Outer White Ring, Inner Black Ring)
+            drawCircle(
+                color = Color.White,
+                radius = markerOuterRadiusPx,
+                center = markerOffset,
+                style = Stroke(width = markerOuterStrokePx)
+            )
+            drawCircle(
+                color = Color.Black,
+                radius = markerInnerRadiusPx,
+                center = markerOffset,
+                style = Stroke(width = markerInnerStrokePx)
+            )
         }
     }
 }
 
 /**
- * Dialog for entering custom font size in points (1 to 1638, increments of 0.5).
+ * Color picker dialog offering:
+ * 1. Standard base colors (20 circular swatches)
+ * 2. Custom user-saved colors (circular swatches, persistent, delete on long-press)
+ * 3. Direct Hex code input with fixed '#' and instant add button
+ * 4. Interactive Color Wheel with Saturation and Brightness sliders
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CustomSizeDialog(
-    initialSize: Float,
-    onSizeConfirmed: (Float) -> Unit,
+private fun ColorPickerDialog(
+    initialColorHex: String,
+    appLanguage: String = "",
+    onColorChosen: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var sizeInput by remember { mutableStateOf(if (initialSize % 1f == 0f) initialSize.toInt().toString() else initialSize.toString()) }
-    var errorText by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val strings = remember(appLanguage) { AppStrings.get(appLanguage) }
+    val normalizedInitial = remember(initialColorHex) {
+        CustomColorManager.normalizeHex(initialColorHex)
+    }
 
-    Dialog(onDismissRequest = onDismiss) {
+    var selectedHex by remember { mutableStateOf(normalizedInitial) }
+    var customColors by remember {
+        mutableStateOf(CustomColorManager.getCustomColors(context))
+    }
+
+    var activeTab by remember { mutableIntStateOf(0) } // 0 = Palette, 1 = Farbrad
+    var hexInputField by remember { mutableStateOf(normalizedInitial.removePrefix("#")) }
+    var hexError by remember { mutableStateOf(false) }
+    var colorToDelete by remember { mutableStateOf<String?>(null) }
+
+    // HSV state for Color Wheel
+    val initialHsv = remember(normalizedInitial) {
+        CustomColorManager.hexToHsv(normalizedInitial)
+    }
+    val defaultBrightness = if (initialHsv[2] > 0.01f) initialHsv[2] else 1.0f
+    var currentHue by remember { mutableFloatStateOf(initialHsv[0]) }
+    var currentSaturation by remember { mutableFloatStateOf(initialHsv[1]) }
+    var currentBrightness by remember { mutableFloatStateOf(defaultBrightness) }
+
+    val liveColor = remember(selectedHex) {
+        Color(DeclensionHistoryExportHelper.parseHexColor(selectedHex))
+    }
+
+    val parsedSelectedInt = remember(selectedHex) {
+        DeclensionHistoryExportHelper.parseHexColor(selectedHex)
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(16.dp),
             color = GeoSurface,
             tonalElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth(0.85f)
+            modifier = Modifier
+                .width(314.dp)
+                .height(520.dp)
         ) {
             Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Schriftgröße anpassen",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GeoOnSurface
-                )
-                Text(
-                    text = "Wert zwischen 1 und 1638 pt (Schritte: 0.5)",
-                    fontSize = 11.5.sp,
-                    color = GeoOnSurfaceVariant
-                )
-
-                OutlinedTextField(
-                    value = sizeInput,
-                    onValueChange = {
-                        sizeInput = it
-                        errorText = null
-                    },
-                    isError = errorText != null,
-                    supportingText = errorText?.let { { Text(it, fontSize = 10.5.sp) } },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
+                // ==========================================
+                // 1. TOP BLOCK: Header + Tabs + Fixed Tab Content
+                // ==========================================
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GeoPrimary,
-                        unfocusedBorderColor = GeoBorder
-                    )
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Abbrechen", fontSize = 12.sp, color = GeoOnSurfaceVariant)
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Button(
-                        onClick = {
-                            val parsed = sizeInput.replace(',', '.').toFloatOrNull()
-                            if (parsed == null || parsed < 1f || parsed > 1638f) {
-                                errorText = "Ungültig (1 - 1638 pt)"
-                            } else {
-                                val rounded = (Math.round(parsed * 2.0) / 2.0).toFloat()
-                                onSizeConfirmed(rounded)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = GeoPrimary)
+                    // Header: Title + Close Button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("OK", fontSize = 12.sp, color = Color.White)
+                        AutoSizingText(
+                            text = strings.colorPickerTitle,
+                            maxFontSize = 16.sp,
+                            minFontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GeoOnSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = strings.close,
+                                tint = GeoOnSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    // Tab Selector: [ Palette ] [ Farbrad ]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(GeoSurfaceVariant)
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (activeTab == 0) GeoPrimary else Color.Transparent)
+                                .clickable { activeTab = 0 }
+                                .testTag("tab_color_palette"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AutoSizingText(
+                                text = strings.colorPickerTabPalette,
+                                color = if (activeTab == 0) Color.White else GeoOnSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                maxFontSize = 13.sp,
+                                minFontSize = 11.sp
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (activeTab == 1) GeoPrimary else Color.Transparent)
+                                .clickable {
+                                    activeTab = 1
+                                    val hsv = CustomColorManager.hexToHsv(selectedHex)
+                                    if (hsv[1] > 0.01f && hsv[2] > 0.01f) {
+                                        currentHue = hsv[0]
+                                    }
+                                    currentSaturation = hsv[1]
+                                    val newBrightness = if (hsv[2] > 0.01f) hsv[2] else 1.0f
+                                    currentBrightness = newBrightness
+                                    if (hsv[2] <= 0.01f) {
+                                        val newHex = CustomColorManager.hsvToHex(currentHue, currentSaturation, newBrightness)
+                                        selectedHex = newHex
+                                        hexInputField = newHex.removePrefix("#")
+                                    }
+                                }
+                                .testTag("tab_color_wheel"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AutoSizingText(
+                                text = strings.colorPickerTabWheel,
+                                color = if (activeTab == 1) Color.White else GeoOnSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                maxFontSize = 13.sp,
+                                minFontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = GeoBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
+                    // Tab Content Container: Fixed Height prevents dialog resizing
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(232.dp),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        if (activeTab == 0) {
+                            // ------------------------------------------
+                            // TAB 0: PALETTE (Standard & Custom Colors)
+                            // ------------------------------------------
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                // Section 1: Standardfarben
+                                Text(
+                                    text = strings.colorPickerStandardColors,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = GeoOnSurface,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    maxItemsInEachRow = 5
+                                ) {
+                                    DeclensionHistoryExportHelper.PREDEFINED_COLORS.forEach { (name, hex) ->
+                                        val isSelected = hex.equals(selectedHex.trim(), ignoreCase = true)
+                                        val colorVal = Color(android.graphics.Color.parseColor(hex))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(CircleShape)
+                                                .background(colorVal)
+                                                .border(
+                                                    width = if (isSelected) 2.5.dp else 1.dp,
+                                                    color = if (isSelected) GeoPrimary else GeoBorder,
+                                                    shape = CircleShape
+                                                )
+                                                .clickable {
+                                                    selectedHex = hex
+                                                    hexInputField = hex.removePrefix("#")
+                                                    val hsv = CustomColorManager.hexToHsv(hex)
+                                                    if (hsv[1] > 0.01f && hsv[2] > 0.01f) {
+                                                        currentHue = hsv[0]
+                                                    }
+                                                    currentSaturation = hsv[1]
+                                                    currentBrightness = hsv[2]
+                                                }
+                                                .testTag("color_swatch_$name"),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isSelected) {
+                                                val checkTint = if (hex == "#FFFFFF" || hex == "#FFFF00" || hex == "#00FFFF") Color.Black else Color.White
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = checkTint,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                HorizontalDivider(
+                                    color = GeoBorder.copy(alpha = 0.4f),
+                                    thickness = 1.dp,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+
+                                // Section 2: Eigene Farben
+                                Text(
+                                    text = strings.colorPickerCustomColors,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = GeoOnSurface,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+
+                                if (customColors.isEmpty()) {
+                                    Text(
+                                        text = "(${strings.colorPickerNoCustomColors})",
+                                        fontSize = 11.5.sp,
+                                        color = GeoOnSurfaceVariant,
+                                        fontStyle = FontStyle.Italic,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                } else {
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        maxItemsInEachRow = 5
+                                    ) {
+                                        customColors.forEach { customHex ->
+                                            val isSelected = customHex.equals(selectedHex.trim(), ignoreCase = true)
+                                            val colorVal = Color(DeclensionHistoryExportHelper.parseHexColor(customHex))
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(CircleShape)
+                                                    .background(colorVal)
+                                                    .border(
+                                                        width = if (isSelected) 2.5.dp else 1.dp,
+                                                        color = if (isSelected) GeoPrimary else GeoBorder,
+                                                        shape = CircleShape
+                                                    )
+                                                    .pointerInput(customHex) {
+                                                        detectTapGestures(
+                                                            onTap = {
+                                                                selectedHex = customHex
+                                                                hexInputField = customHex.removePrefix("#")
+                                                                val hsv = CustomColorManager.hexToHsv(customHex)
+                                                                if (hsv[1] > 0.01f && hsv[2] > 0.01f) {
+                                                                    currentHue = hsv[0]
+                                                                }
+                                                                currentSaturation = hsv[1]
+                                                                currentBrightness = hsv[2]
+                                                            },
+                                                            onLongPress = { colorToDelete = customHex }
+                                                        )
+                                                    }
+                                                    .testTag("custom_swatch_$customHex"),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isSelected) {
+                                                    val luminance = (colorVal.red * 0.299f + colorVal.green * 0.587f + colorVal.blue * 0.114f)
+                                                    val checkTint = if (luminance > 0.6f) Color.Black else Color.White
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = checkTint,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // ------------------------------------------
+                            // TAB 1: FARBRAD (COLOR WHEEL)
+                            // ------------------------------------------
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                // Interactive Color Wheel (Free 2D selection: Angle = Hue, Distance = Saturation, Dimming = Brightness)
+                                InteractiveColorWheel(
+                                    hue = currentHue,
+                                    saturation = currentSaturation,
+                                    brightness = currentBrightness,
+                                    onColorChanged = { h, s ->
+                                        currentHue = h
+                                        currentSaturation = s
+                                        val newHex = CustomColorManager.hsvToHex(h, s, currentBrightness)
+                                        selectedHex = newHex
+                                        hexInputField = newHex.removePrefix("#")
+                                    },
+                                    modifier = Modifier.size(106.dp)
+                                )
+
+                                // Sliders & Color Square Section
+                                // The Color Square is positioned on the right side in front of the sliders (outside the slider area),
+                                // precisely vertically centered relative to the top (Saturation) and bottom (Brightness) sliders.
+                                Column(
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    // Saturation Label (aligned with slider width)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = strings.colorPickerSaturation,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = GeoOnSurfaceVariant,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                            Text(
+                                                text = "${(currentSaturation * 100).toInt()}%",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = GeoOnSurface,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                        // Spacer matching the 40dp color square width so text aligns with slider
+                                        Spacer(modifier = Modifier.width(40.dp))
+                                    }
+
+                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                    // Row spanning from top of Saturation Slider to bottom of Brightness Slider
+                                    // Vertically centers the Color Square on the right relative to both sliders
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        // Left Column: Saturation Slider, Brightness Label & Brightness Slider
+                                        Column(
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            // Saturation Slider (height 22dp)
+                                            Slider(
+                                                value = currentSaturation,
+                                                onValueChange = { s ->
+                                                    currentSaturation = s
+                                                    val newHex = CustomColorManager.hsvToHex(currentHue, s, currentBrightness)
+                                                    selectedHex = newHex
+                                                    hexInputField = newHex.removePrefix("#")
+                                                },
+                                                valueRange = 0f..1f,
+                                                modifier = Modifier.height(22.dp),
+                                                colors = SliderDefaults.colors(
+                                                    thumbColor = GeoPrimary,
+                                                    activeTrackColor = GeoPrimary,
+                                                    inactiveTrackColor = GeoBorder
+                                                )
+                                            )
+
+                                            Spacer(modifier = Modifier.height(14.dp))
+
+                                            // Brightness Label
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = strings.colorPickerBrightness,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = GeoOnSurfaceVariant,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                                Text(
+                                                    text = "${(currentBrightness * 100).toInt()}%",
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = GeoOnSurface,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.height(2.dp))
+
+                                            // Brightness Slider (height 22dp)
+                                            Slider(
+                                                value = currentBrightness,
+                                                onValueChange = { b ->
+                                                    currentBrightness = b
+                                                    val newHex = CustomColorManager.hsvToHex(currentHue, currentSaturation, b)
+                                                    selectedHex = newHex
+                                                    hexInputField = newHex.removePrefix("#")
+                                                },
+                                                valueRange = 0f..1f,
+                                                modifier = Modifier.height(22.dp),
+                                                colors = SliderDefaults.colors(
+                                                    thumbColor = GeoPrimary,
+                                                    activeTrackColor = GeoPrimary,
+                                                    inactiveTrackColor = GeoBorder
+                                                )
+                                            )
+                                        }
+
+                                        // Single Color Square (40dp x 40dp, positioned in front of sliders on the right,
+                                        // with equal distance to the top slider and bottom slider)
+                                        Box(
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(liveColor)
+                                                .border(1.5.dp, GeoBorder, RoundedCornerShape(8.dp))
+                                                .testTag("color_picker_preview_square")
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // 2. BOTTOM BLOCK: Hex Input (70/30) + Action Buttons (50/50)
+                // ==========================================
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    HorizontalDivider(color = GeoBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
+                    // Section: Eigene Farbe hinzufügen (Hex Code Input - 70% Field, 30% Button, 44dp Height)
+                    Text(
+                        text = strings.colorPickerAddCustomColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GeoOnSurface,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+
+                    // Hex Input (70% width, 44dp height) + Add Button (30% width, 44dp height)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 70% Width Hex Code Field with 10dp horizontal, 6dp vertical padding
+                        Box(
+                            modifier = Modifier
+                                .weight(0.70f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GeoSurface)
+                                .border(
+                                    width = 1.dp,
+                                    color = if (hexError) MaterialTheme.colorScheme.error else GeoBorder,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "#",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GeoOnSurface
+                                )
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (hexInputField.isEmpty()) {
+                                        Text(
+                                            text = "FF5733",
+                                            fontSize = 13.5.sp,
+                                            color = GeoOnSurfaceVariant.copy(alpha = 0.45f)
+                                        )
+                                    }
+                                    BasicTextField(
+                                        value = hexInputField,
+                                        onValueChange = { input ->
+                                            hexError = false
+                                            val sanitized = input.removePrefix("#").filter {
+                                                it.isDigit() || (it in 'a'..'f') || (it in 'A'..'F')
+                                            }.take(6).uppercase()
+                                            hexInputField = sanitized
+                                            if (CustomColorManager.isValidHex(sanitized)) {
+                                                val formatted = CustomColorManager.normalizeHex(sanitized)
+                                                selectedHex = formatted
+                                                val hsv = CustomColorManager.hexToHsv(formatted)
+                                                if (hsv[1] > 0.01f && hsv[2] > 0.01f) {
+                                                    currentHue = hsv[0]
+                                                }
+                                                currentSaturation = hsv[1]
+                                                currentBrightness = hsv[2]
+                                            }
+                                        },
+                                        singleLine = true,
+                                        textStyle = TextStyle(
+                                            color = GeoOnSurface,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        cursorBrush = SolidColor(GeoPrimary),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("hex_code_input")
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(liveColor)
+                                        .border(1.dp, GeoBorder, CircleShape)
+                                        .testTag("hex_preview_swatch")
+                                )
+                            }
+                        }
+
+                        // 30% Width Add Button
+                        Button(
+                            onClick = {
+                                if (CustomColorManager.isValidHex(hexInputField)) {
+                                    val formatted = CustomColorManager.normalizeHex(hexInputField)
+                                    CustomColorManager.addCustomColor(context, formatted)
+                                    customColors = CustomColorManager.getCustomColors(context)
+                                    selectedHex = formatted
+                                    hexInputField = formatted.removePrefix("#")
+                                    val hsv = CustomColorManager.hexToHsv(formatted)
+                                    if (hsv[1] > 0.01f && hsv[2] > 0.01f) {
+                                        currentHue = hsv[0]
+                                    }
+                                    currentSaturation = hsv[1]
+                                    currentBrightness = hsv[2]
+                                    hexError = false
+                                } else {
+                                    hexError = true
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(0.30f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = GeoPrimary,
+                                contentColor = Color.White
+                            ),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) {
+                            AutoSizingText(
+                                text = strings.colorPickerAddButton,
+                                maxFontSize = 13.sp,
+                                minFontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    if (hexError) {
+                        Text(
+                            text = strings.colorPickerInvalidHex,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    HorizontalDivider(color = GeoBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
+                    // Action Buttons: [Abbrechen (50%)] [Übernehmen (50%)] (44dp height)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, GeoBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = GeoSurfaceVariant,
+                                contentColor = GeoOnSurface
+                            ),
+                            contentPadding = PaddingValues(horizontal = 6.dp)
+                        ) {
+                            AutoSizingText(
+                                text = strings.colorPickerCancel,
+                                maxFontSize = 14.sp,
+                                minFontSize = 11.sp,
+                                color = GeoOnSurface,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                val clean = CustomColorManager.normalizeHex(selectedHex)
+                                onColorChosen(clean)
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = GeoPrimary),
+                            contentPadding = PaddingValues(horizontal = 6.dp)
+                        ) {
+                            AutoSizingText(
+                                text = strings.colorPickerApply,
+                                maxFontSize = 14.sp,
+                                minFontSize = 11.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Delete Custom Color Confirmation Dialog
+    if (colorToDelete != null) {
+        val targetHex = colorToDelete!!
+        AlertDialog(
+            onDismissRequest = { colorToDelete = null },
+            title = {
+                Text(
+                    text = strings.colorPickerDeleteTitle,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GeoOnSurface,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            },
+            text = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(DeclensionHistoryExportHelper.parseHexColor(targetHex)))
+                            .border(1.dp, GeoBorder, CircleShape)
+                    )
+                    Text(
+                        text = "$targetHex ${strings.colorPickerDeleteMessage}",
+                        fontSize = 13.sp,
+                        color = GeoOnSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        CustomColorManager.removeCustomColor(context, targetHex)
+                        customColors = CustomColorManager.getCustomColors(context)
+                        colorToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(strings.colorPickerDeleteConfirm, maxLines = 1, softWrap = false)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { colorToDelete = null }) {
+                    Text(strings.colorPickerCancel, maxLines = 1, softWrap = false)
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Modern Centered Dialog for selecting font size:
+ * 1. Compact header with title "Schriftgröße wählen" and [X] close button
+ * 2. 4x3 Grid of 12 common preset sizes (9, 10, 11, 12 / 14, 16, 18, 20 / 24, 28, 36, 48 pt)
+ * 3. Dedicated "Eigene Größe" section with [-], numeric input field, and [+] buttons
+ * 4. Confirmation [Übernehmen] and cancel [Abbrechen] buttons at the bottom
+ */
+@Composable
+private fun FontSizePickerDialog(
+    initialSize: Float,
+    onSizeSelected: (Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedSize by remember { mutableFloatStateOf(initialSize) }
+    var customInputText by remember {
+        mutableStateOf(if (initialSize % 1f == 0f) initialSize.toInt().toString() else initialSize.toString())
+    }
+
+    val standardSizes = remember {
+        listOf(
+            listOf(9f, 10f, 11f, 12f),
+            listOf(14f, 16f, 18f, 20f),
+            listOf(24f, 28f, 36f, 48f)
+        )
+    }
+
+    val focusManager = LocalFocusManager.current
+    val windowInsetsIme = WindowInsets.ime
+    val windowInsetsNav = WindowInsets.navigationBars
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect {
+            dialogWindow?.let { win ->
+                win.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+                win.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    focusManager.clearFocus()
+                    onDismiss()
+                }
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .widthIn(min = 280.dp, max = 340.dp)
+                    .fillMaxWidth(0.9f)
+                    .wrapContentHeight()
+                    .graphicsLayer {
+                        // Read insets inside graphicsLayer scope to execute on RenderNode GPU pass without recomposition
+                        val imeBottomPx = windowInsetsIme.getBottom(this)
+                        val navBottomPx = windowInsetsNav.getBottom(this)
+                        val imeHeightPx = maxOf(0, imeBottomPx - navBottomPx)
+                        val extraMarginPx = if (imeHeightPx > 0) 24.dp.toPx() else 0f
+                        translationY = -(imeHeightPx / 2f + extraMarginPx)
+                    }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { focusManager.clearFocus() }
+                    .testTag("font_size_dialog")
+                    .testTag("font_size_sheet"),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                tonalElevation = 6.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Header: Title + [X] Close Button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Schriftgröße wählen",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("font_size_close_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Schließen",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        thickness = 1.dp
+                    )
+
+                    // Section 1: Standardgrößen
+                    Text(
+                        text = "Standardgrößen:",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        standardSizes.forEach { rowSizes ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                rowSizes.forEach { sz ->
+                                    val isSelected = (selectedSize == sz)
+                                    val label = "${sz.toInt()} pt"
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(30.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.surface
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                                                shape = RoundedCornerShape(6.dp)
+                                            )
+                                            .clickable {
+                                                selectedSize = sz
+                                                customInputText = if (sz % 1f == 0f) sz.toInt().toString() else sz.toString()
+                                            }
+                                            .testTag("preset_size_${sz.toInt()}"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        thickness = 1.dp
+                    )
+
+                    // Section 2: Eigene Größe
+                    Text(
+                        text = "Eigene Größe:",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // [-] Button
+                        FilledTonalIconButton(
+                            onClick = {
+                                val current = customInputText.replace(',', '.').toFloatOrNull() ?: selectedSize
+                                val newSz = maxOf(1f, current - 1f)
+                                selectedSize = newSz
+                                customInputText = if (newSz % 1f == 0f) newSz.toInt().toString() else newSz.toString()
+                            },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("font_size_minus"),
+                            shape = RoundedCornerShape(6.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Remove,
+                                contentDescription = "Verkleinern",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        // Direct numeric input field - compact, centered, and guaranteed no clipping
+                        BasicTextField(
+                            value = customInputText,
+                            onValueChange = { input ->
+                                val filtered = input.filter { it.isDigit() || it == '.' || it == ',' }
+                                customInputText = filtered
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    focusManager.clearFocus()
+                                    val parsed = customInputText.replace(',', '.').toFloatOrNull()
+                                    if (parsed != null && parsed >= 1f && parsed <= 1638f) {
+                                        selectedSize = (Math.round(parsed * 2.0) / 2.0).toFloat()
+                                    }
+                                }
+                            ),
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                textAlign = TextAlign.Center,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            decorationBox = { innerTextField ->
+                                Row(
+                                    modifier = Modifier
+                                        .width(100.dp)
+                                        .height(38.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surface)
+                                        .border(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier.weight(1f, fill = false),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        innerTextField()
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "pt",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .onFocusChanged { focusState ->
+                                    if (!focusState.isFocused) {
+                                        val parsed = customInputText.replace(',', '.').toFloatOrNull()
+                                        if (parsed != null && parsed >= 1f && parsed <= 1638f) {
+                                            selectedSize = (Math.round(parsed * 2.0) / 2.0).toFloat()
+                                        }
+                                    }
+                                }
+                                .testTag("font_size_custom_input")
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        // [+] Button
+                        FilledTonalIconButton(
+                            onClick = {
+                                val current = customInputText.replace(',', '.').toFloatOrNull() ?: selectedSize
+                                val newSz = minOf(1638f, current + 1f)
+                                selectedSize = newSz
+                                customInputText = if (newSz % 1f == 0f) newSz.toInt().toString() else newSz.toString()
+                            },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("font_size_plus"),
+                            shape = RoundedCornerShape(6.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Vergrößern",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        thickness = 1.dp
+                    )
+
+                    // Bottom Action Buttons: [ Abbrechen ] [ Übernehmen ]
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp)
+                                .testTag("font_size_cancel_button"),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Text(
+                                text = "Abbrechen",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                val parsed = customInputText.replace(',', '.').toFloatOrNull()
+                                val finalSz = if (parsed != null && parsed >= 1f && parsed <= 1638f) {
+                                    (Math.round(parsed * 2.0) / 2.0).toFloat()
+                                } else {
+                                    selectedSize
+                                }
+                                onSizeSelected(finalSz)
+                                onDismiss()
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp)
+                                .testTag("font_size_confirm_button"),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(
+                                text = "Übernehmen",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }

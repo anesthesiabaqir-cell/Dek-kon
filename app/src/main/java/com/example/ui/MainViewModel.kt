@@ -22,6 +22,7 @@ import com.example.data.notebook.Notebook
 import com.example.data.notebook.NotebookRepository
 import com.example.data.notebook.NotebookSettings
 import com.example.data.notebook.ImportedJsonResult
+import com.example.data.notebook.ImportedNotebookPackage
 import com.example.data.remote.GeminiDeclensionService
 import com.example.data.repository.WordRepository
 import com.example.ui.theme.AppThemePackage
@@ -46,12 +47,22 @@ data class JsonExportTarget(
 
 data class ImportSingleChoice(
     val detectedName: String,
-    val words: List<WordHistoryEntity>
+    val words: List<WordHistoryEntity>,
+    val settings: NotebookSettings? = null
 )
 
 data class ImportMultiChoice(
-    val notebooksMap: Map<String, List<WordHistoryEntity>>,
+    val packages: List<ImportedNotebookPackage>,
     val fallbackName: String
+) {
+    val notebooksMap: Map<String, List<WordHistoryEntity>>
+        get() = packages.associate { it.name to it.words }
+}
+
+data class PostImportApiKeyPrompt(
+    val notebookName: String,
+    val provider: String = "GEMINI",
+    val modelId: String = "gemini-2.5-flash-latest"
 )
 
 data class MainUiState(
@@ -88,13 +99,15 @@ data class MainUiState(
     val allNotebooks: List<Notebook> = emptyList(),
     val activeNotebook: Notebook? = null,
     val themeMode: String = "auto", // "auto", "light", "dark"
+    val appLanguage: String = "de", // "de", "en", "ar"
     val isCreateNotebookDialogOpen: Boolean = false,
     val isManageNotebooksDialogOpen: Boolean = false,
     val activeJsonExportTarget: JsonExportTarget? = null,
     val isSelectNotebooksExportDialogOpen: Boolean = false,
     val pendingTreeExportNotebookIds: List<String>? = null,
     val importSingleChoice: ImportSingleChoice? = null,
-    val importMultiChoice: ImportMultiChoice? = null
+    val importMultiChoice: ImportMultiChoice? = null,
+    val postImportApiKeyPrompt: PostImportApiKeyPrompt? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -130,7 +143,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(
         MainUiState(
             selectedTheme = themePreferences.getSelectedTheme(),
-            themeMode = themePreferences.getThemeMode()
+            themeMode = themePreferences.getThemeMode(),
+            appLanguage = themePreferences.getAppLanguage()
         )
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -181,10 +195,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "Standard (${activeNotebook.name})"
             }
 
+            val currentAppLanguage = themePreferences.getAppLanguage()
+            val activeLanguage = if (currentAppLanguage.isNotBlank()) currentAppLanguage else notebookSettings.appLanguage.ifBlank { "de" }
+            themePreferences.saveAppLanguage(activeLanguage)
+
             _uiState.value = _uiState.value.copy(
                 allNotebooks = allNotebooks,
                 activeNotebook = activeNotebook,
                 themeMode = activeThemeMode,
+                appLanguage = activeLanguage,
                 hasApiKey = isConfigured,
                 selectedProvider = provider,
                 apiKeyInput = geminiKey,
@@ -355,9 +374,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val (remaining, total) = repository.getDailyUsage(provider, currentModel)
 
         val models = repository.getAvailableModelsForProvider(provider)
+        val currentLanguage = themePreferences.getAppLanguage()
 
         _uiState.value = _uiState.value.copy(
             isApiKeyDialogOpen = true,
+            appLanguage = currentLanguage,
             selectedProvider = provider,
             apiKeyInput = geminiKey,
             geminiApiKeyInput = geminiKey,
@@ -874,6 +895,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val theme = AppThemePackage.fromId(settings.themeColorId)
             themePreferences.saveSelectedTheme(theme)
             themePreferences.saveThemeMode(settings.themeMode)
+            val globalLanguage = themePreferences.getAppLanguage()
+            val effectiveLanguage = if (globalLanguage.isNotBlank()) globalLanguage else settings.appLanguage.ifBlank { "de" }
+            themePreferences.saveAppLanguage(effectiveLanguage)
 
             // Sync API key to repository
             if (settings.customApiKey.isNotBlank()) {
@@ -888,6 +912,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 activeNotebook = newActive,
                 selectedTheme = theme,
                 themeMode = settings.themeMode,
+                appLanguage = effectiveLanguage,
                 selectedProvider = ModelProvider.fromId(settings.selectedProvider),
                 selectedModel = settings.selectedModel,
                 apiKeyInput = settings.customApiKey,
@@ -1057,7 +1082,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     is ImportedJsonResult.SingleNotebook -> {
                         withContext(Dispatchers.Main) {
                             _uiState.value = _uiState.value.copy(
-                                importSingleChoice = ImportSingleChoice(result.detectedName, result.words)
+                                importSingleChoice = ImportSingleChoice(
+                                    detectedName = result.detectedName,
+                                    words = result.words,
+                                    settings = result.settings
+                                )
                             )
                         }
                     }
@@ -1065,7 +1094,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         withContext(Dispatchers.Main) {
                             _uiState.value = _uiState.value.copy(
                                 importMultiChoice = ImportMultiChoice(
-                                    notebooksMap = result.notebooks,
+                                    packages = result.packages,
                                     fallbackName = fileName.removeSuffix(".json").removeSuffix(".JSON")
                                 )
                             )
@@ -1098,6 +1127,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(importMultiChoice = null)
     }
 
+    fun dismissPostImportApiKeyPrompt() {
+        _uiState.value = _uiState.value.copy(postImportApiKeyPrompt = null)
+    }
+
+    fun savePostImportApiKey(apiKey: String) {
+        val trimmed = apiKey.trim()
+        if (trimmed.isNotBlank()) {
+            apiKeyManager.saveApiKey(trimmed)
+            val currentSettings = _uiState.value.activeNotebook?.settings
+            if (currentSettings != null) {
+                val updated = currentSettings.copy(customApiKey = trimmed)
+                saveActiveNotebookSettings(updated)
+            }
+        }
+        _uiState.value = _uiState.value.copy(
+            postImportApiKeyPrompt = null,
+            hasApiKey = apiKeyManager.isKeyConfigured()
+        )
+    }
+
+    fun openSettingsFromPostImport() {
+        _uiState.value = _uiState.value.copy(
+            postImportApiKeyPrompt = null,
+            isApiKeyDialogOpen = true
+        )
+    }
+
     fun executeImportSingleMerge() {
         val choice = _uiState.value.importSingleChoice ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -1120,16 +1176,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val choice = _uiState.value.importSingleChoice ?: return
         val nameToUse = notebookName.trim().ifBlank { choice.detectedName }
         viewModelScope.launch(Dispatchers.IO) {
-            val newNotebook = notebookRepository.importSingleNotebookAsNew(nameToUse, choice.words)
+            val newNotebook = notebookRepository.importSingleNotebookAsNew(
+                name = nameToUse,
+                words = choice.words,
+                importedSettings = choice.settings
+            )
             val activeHistory = notebookRepository.loadActiveHistory()
             repository.reloadRoomWithItems(activeHistory)
             val updatedAll = notebookRepository.listAllNotebooks()
+
+            // Apply theme/language from imported settings if present
+            if (choice.settings != null) {
+                themePreferences.saveSelectedTheme(AppThemePackage.fromId(choice.settings.themeColorId))
+                themePreferences.saveThemeMode(choice.settings.themeMode)
+                themePreferences.saveAppLanguage(choice.settings.appLanguage)
+            }
+
             withContext(Dispatchers.Main) {
+                val promptKey = if (!apiKeyManager.isKeyConfigured() || choice.settings != null) {
+                    PostImportApiKeyPrompt(
+                        notebookName = newNotebook.name,
+                        provider = newNotebook.settings.selectedProvider,
+                        modelId = newNotebook.settings.selectedModel
+                    )
+                } else null
+
                 _uiState.value = _uiState.value.copy(
                     importSingleChoice = null,
                     allNotebooks = updatedAll,
                     activeNotebook = newNotebook,
-                    importStatusMessage = "Notizbuch '${newNotebook.name}' mit ${choice.words.size} Wörtern erstellt!"
+                    selectedTheme = AppThemePackage.fromId(newNotebook.settings.themeColorId),
+                    themeMode = newNotebook.settings.themeMode,
+                    appLanguage = newNotebook.settings.appLanguage,
+                    importStatusMessage = "Notizbuch '${newNotebook.name}' mit ${choice.words.size} Wörtern erstellt!",
+                    postImportApiKeyPrompt = promptKey
                 )
             }
         }
@@ -1138,17 +1218,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun executeImportMultiSeparate() {
         val choice = _uiState.value.importMultiChoice ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            val importedList = notebookRepository.importMultipleNotebooksSeparate(choice.notebooksMap)
+            val importedList = notebookRepository.importMultipleNotebooksSeparate(choice.packages)
             val active = notebookRepository.getActiveNotebook()
             val activeHistory = notebookRepository.loadActiveHistory()
             repository.reloadRoomWithItems(activeHistory)
             val updatedAll = notebookRepository.listAllNotebooks()
             withContext(Dispatchers.Main) {
+                val promptKey = if (!apiKeyManager.isKeyConfigured() || importedList.any { it.settings.selectedProvider.isNotBlank() }) {
+                    PostImportApiKeyPrompt(
+                        notebookName = active.name,
+                        provider = active.settings.selectedProvider,
+                        modelId = active.settings.selectedModel
+                    )
+                } else null
+
                 _uiState.value = _uiState.value.copy(
                     importMultiChoice = null,
                     allNotebooks = updatedAll,
                     activeNotebook = active,
-                    importStatusMessage = "${importedList.size} Notizbücher erfolgreich importiert!"
+                    selectedTheme = AppThemePackage.fromId(active.settings.themeColorId),
+                    themeMode = active.settings.themeMode,
+                    appLanguage = active.settings.appLanguage,
+                    importStatusMessage = "${importedList.size} Notizbücher erfolgreich importiert!",
+                    postImportApiKeyPrompt = promptKey
                 )
             }
         }
@@ -1158,17 +1250,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val choice = _uiState.value.importMultiChoice ?: return
         val nameToUse = notebookName.trim().ifBlank { choice.fallbackName }
         viewModelScope.launch(Dispatchers.IO) {
-            val allWords = choice.notebooksMap.values.flatten()
-            val newNotebook = notebookRepository.importMultipleNotebooksAsSingle(nameToUse, allWords)
+            val allWords = choice.packages.flatMap { it.words }
+            val firstSettings = choice.packages.firstOrNull { it.settings != null }?.settings
+            val newNotebook = notebookRepository.importMultipleNotebooksAsSingle(
+                name = nameToUse,
+                allWords = allWords,
+                firstSettings = firstSettings
+            )
             val activeHistory = notebookRepository.loadActiveHistory()
             repository.reloadRoomWithItems(activeHistory)
             val updatedAll = notebookRepository.listAllNotebooks()
+
+            if (firstSettings != null) {
+                themePreferences.saveSelectedTheme(AppThemePackage.fromId(firstSettings.themeColorId))
+                themePreferences.saveThemeMode(firstSettings.themeMode)
+                themePreferences.saveAppLanguage(firstSettings.appLanguage)
+            }
+
             withContext(Dispatchers.Main) {
+                val promptKey = if (!apiKeyManager.isKeyConfigured() || firstSettings != null) {
+                    PostImportApiKeyPrompt(
+                        notebookName = newNotebook.name,
+                        provider = newNotebook.settings.selectedProvider,
+                        modelId = newNotebook.settings.selectedModel
+                    )
+                } else null
+
                 _uiState.value = _uiState.value.copy(
                     importMultiChoice = null,
                     allNotebooks = updatedAll,
                     activeNotebook = newNotebook,
-                    importStatusMessage = "Notizbuch '${newNotebook.name}' mit ${allWords.size} Wörtern erstellt!"
+                    selectedTheme = AppThemePackage.fromId(newNotebook.settings.themeColorId),
+                    themeMode = newNotebook.settings.themeMode,
+                    appLanguage = newNotebook.settings.appLanguage,
+                    importStatusMessage = "Notizbuch '${newNotebook.name}' mit ${allWords.size} Wörtern erstellt!",
+                    postImportApiKeyPrompt = promptKey
                 )
             }
         }
@@ -1191,7 +1307,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openCreateNotebookDialog() {
-        _uiState.value = _uiState.value.copy(isCreateNotebookDialogOpen = true)
+        val currentLanguage = themePreferences.getAppLanguage()
+        _uiState.value = _uiState.value.copy(
+            appLanguage = currentLanguage,
+            isCreateNotebookDialogOpen = true
+        )
     }
 
     fun closeCreateNotebookDialog() {
@@ -1200,8 +1320,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openManageNotebooksDialog() {
         val all = notebookRepository.listAllNotebooks()
+        val currentLanguage = themePreferences.getAppLanguage()
         _uiState.value = _uiState.value.copy(
             allNotebooks = all,
+            appLanguage = currentLanguage,
             isManageNotebooksDialogOpen = true
         )
     }
@@ -1211,8 +1333,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onOpenNotebookManagerFromSettings() {
+        val currentLanguage = themePreferences.getAppLanguage()
         _uiState.value = _uiState.value.copy(
             isApiKeyDialogOpen = false,
+            appLanguage = currentLanguage,
             isManageNotebooksDialogOpen = true
         )
     }
@@ -1223,6 +1347,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val currentSettings = _uiState.value.activeNotebook?.settings
         if (currentSettings != null) {
             val updated = currentSettings.copy(themeMode = mode)
+            saveActiveNotebookSettings(updated)
+        }
+    }
+
+    fun onAppLanguageSelected(languageCode: String) {
+        val cleanCode = when (languageCode.lowercase().trim()) {
+            "en" -> "en"
+            "ar" -> "ar"
+            else -> "de"
+        }
+        themePreferences.saveAppLanguage(cleanCode)
+        _uiState.value = _uiState.value.copy(appLanguage = cleanCode)
+        val currentSettings = _uiState.value.activeNotebook?.settings
+        if (currentSettings != null) {
+            val updated = currentSettings.copy(appLanguage = cleanCode)
             saveActiveNotebookSettings(updated)
         }
     }

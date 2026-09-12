@@ -26,4 +26,22 @@
     <string name="history_clear_button">Leeren</string>
     <!-- Speech Tempo -->
     <string name="speech_tempo_title">Sprech-Tempo</string>
+
+    <!-- Color Picker Dialog -->
+    <string name="color_picker_title">Farbe auswählen</string>
+    <string name="color_picker_tab_palette">Palette</string>
+    <string name="color_picker_tab_wheel">Farbrad</string>
+    <string name="color_picker_standard_colors">Standardfarben:</string>
+    <string name="color_picker_custom_colors">Eigene Farben:</string>
+    <string name="color_picker_no_custom_colors">Noch keine eigenen Farben</string>
+    <string name="color_picker_add_custom_color">Eigene Farbe hinzufügen:</string>
+    <string name="color_picker_add_button">Hinzufügen</string>
+    <string name="color_picker_saturation">Sättigung</string>
+    <string name="color_picker_brightness">Helligkeit</string>
+    <string name="color_picker_cancel">Abbrechen</string>
+    <string name="color_picker_apply">Übernehmen</string>
+    <string name="color_picker_invalid_hex">Ungültiger Hex-Code</string>
+    <string name="color_picker_delete_title">Farbe löschen</string>
+    <string name="color_picker_delete_message">Möchten Sie diese Farbe wirklich löschen?</string>
+    <string name="color_picker_delete_confirm">Löschen</string>
 </resources>

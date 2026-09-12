@@ -379,6 +379,19 @@ class NotebookRepository(private val context: Context) {
     }
 
     @Synchronized
+    fun loadNotebookSettings(notebookId: String): NotebookSettings {
+        val folder = File(getRootDirectory(), notebookId)
+        val file = File(folder, SETTINGS_FILE_NAME)
+        if (!file.exists()) return NotebookSettings(notebookName = notebookId)
+        return try {
+            NotebookSettings.fromJson(file.readText(), fallbackName = notebookId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading notebook settings for $notebookId", e)
+            NotebookSettings(notebookName = notebookId)
+        }
+    }
+
+    @Synchronized
     fun saveNotebookSettings(notebookId: String, settings: NotebookSettings): Boolean {
         return try {
             val folder = File(getRootDirectory(), notebookId)
@@ -470,38 +483,53 @@ class NotebookRepository(private val context: Context) {
 
     /**
      * Exports a single notebook to a formatted JSON string.
-     * Contains the notebook name and its word history.
+     * Contains notebook name, full settings (excluding keys and folder URI), and word history.
      */
     fun exportNotebookToJsonString(notebookId: String): String {
         val items = loadNotebookHistory(notebookId)
         val notebook = listAllNotebooks().find { it.id == notebookId }
         val name = notebook?.name ?: notebookId
+        val settings = loadNotebookSettings(notebookId)
+
         val obj = JSONObject().apply {
+            put("version", 2)
+            put("notebook_name", name)
             put("notebookName", name)
+            put("exported_at", System.currentTimeMillis())
+            put("settings", settings.toExportSettingsJson())
             put("words", serializeHistoryToJson(items))
+            put("history", serializeHistoryToJson(items))
         }
         return obj.toString(2)
     }
 
     /**
      * Exports all or selected notebooks into a single combined JSON string.
-     * Matches structure:
-     * {
-     *   "Allgemein": { "words": [...] },
-     *   "A1.1 - Grundlagen": { "words": [...] }
-     * }
+     * Includes metadata, full settings per notebook, and history.
      */
     fun exportNotebooksCombinedJsonString(notebookIds: List<String> = emptyList()): String {
         val all = listAllNotebooks()
         val targets = if (notebookIds.isEmpty()) all else all.filter { it.id in notebookIds }
-        val rootObj = JSONObject()
+        val rootObj = JSONObject().apply {
+            put("version", 2)
+            put("exported_at", System.currentTimeMillis())
+        }
+
+        val notebooksArray = JSONArray()
         for (nb in targets) {
             val items = loadNotebookHistory(nb.id)
+            val settings = loadNotebookSettings(nb.id)
             val sectionObj = JSONObject().apply {
+                put("notebook_name", nb.name)
+                put("notebookName", nb.name)
+                put("settings", settings.toExportSettingsJson())
                 put("words", serializeHistoryToJson(items))
+                put("history", serializeHistoryToJson(items))
             }
+            notebooksArray.put(sectionObj)
             rootObj.put(nb.name, sectionObj)
         }
+        rootObj.put("notebooks", notebooksArray)
         return rootObj.toString(2)
     }
 
@@ -519,9 +547,15 @@ class NotebookRepository(private val context: Context) {
         for (nb in targets) {
             try {
                 val items = loadNotebookHistory(nb.id)
+                val settings = loadNotebookSettings(nb.id)
                 val jsonString = JSONObject().apply {
+                    put("version", 2)
+                    put("notebook_name", nb.name)
                     put("notebookName", nb.name)
+                    put("exported_at", System.currentTimeMillis())
+                    put("settings", settings.toExportSettingsJson())
                     put("words", serializeHistoryToJson(items))
+                    put("history", serializeHistoryToJson(items))
                 }.toString(2)
 
                 val safeBase = sanitizeFileName(nb.name).ifBlank { "Notizbuch" }
@@ -546,7 +580,27 @@ class NotebookRepository(private val context: Context) {
     }
 
     /**
+     * Resolves a non-conflicting notebook name by appending a suffix like (2), (3) if it already exists.
+     */
+    fun resolveUniqueNotebookName(baseName: String): String {
+        val existingNames = listAllNotebooks().map { it.name.trim().lowercase() }.toSet()
+        val cleanBase = baseName.trim().ifBlank { "Notizbuch" }
+        if (!existingNames.contains(cleanBase.lowercase())) {
+            return cleanBase
+        }
+        var counter = 2
+        while (true) {
+            val candidate = "$cleanBase ($counter)"
+            if (!existingNames.contains(candidate.lowercase())) {
+                return candidate
+            }
+            counter++
+        }
+    }
+
+    /**
      * Parses an arbitrary JSON string into either a single notebook or multiple notebooks representation.
+     * Supports both new formats (with settings) and legacy formats (history only).
      */
     fun parseImportedJson(jsonString: String, fallbackFileName: String = "Importiertes_Notizbuch"): ImportedJsonResult {
         val trimmed = jsonString.trim()
@@ -555,11 +609,11 @@ class NotebookRepository(private val context: Context) {
         val cleanFallback = fallbackFileName.removeSuffix(".json").removeSuffix(".JSON").trim().ifBlank { "Importiertes_Notizbuch" }
 
         try {
-            // Case 1: Root is a JSON Array of words
+            // Case 1: Root is a JSON Array of words (legacy format)
             if (trimmed.startsWith("[")) {
                 val items = parseJsonHistory(trimmed)
                 return if (items.isNotEmpty()) {
-                    ImportedJsonResult.SingleNotebook(cleanFallback, items)
+                    ImportedJsonResult.SingleNotebook(cleanFallback, items, null)
                 } else {
                     ImportedJsonResult.EmptyOrInvalid
                 }
@@ -567,40 +621,70 @@ class NotebookRepository(private val context: Context) {
 
             val rootObj = JSONObject(trimmed)
 
-            // Case 2: Root object has "words" array directly
-            if (rootObj.has("words")) {
-                val wordsArray = rootObj.getJSONArray("words")
-                val name = rootObj.optString("notebookName").trim().ifBlank { cleanFallback }
-                val items = parseJsonHistory(wordsArray.toString())
-                return if (items.isNotEmpty()) {
-                    ImportedJsonResult.SingleNotebook(name, items)
+            // Case 2: Root object has "words" or "history" array directly (single notebook)
+            if (rootObj.has("words") || rootObj.has("history")) {
+                val wordsArray = rootObj.optJSONArray("words") ?: rootObj.optJSONArray("history")
+                val name = rootObj.optString("notebook_name").ifBlank { rootObj.optString("notebookName") }.trim().ifBlank { cleanFallback }
+                val items = if (wordsArray != null) parseJsonHistory(wordsArray.toString()) else emptyList()
+                val settingsObj = rootObj.optJSONObject("settings")
+                val settings = if (settingsObj != null) NotebookSettings.parseFromExportSettingsJson(settingsObj, name) else null
+                return if (items.isNotEmpty() || settings != null) {
+                    ImportedJsonResult.SingleNotebook(name, items, settings)
                 } else {
                     ImportedJsonResult.EmptyOrInvalid
                 }
             }
 
-            // Case 3: Key-value map: { "Notebook1": { "words": [...] }, "Notebook2": { "words": [...] } }
-            // or { "Notebook1": [...] }
-            val notebooksMap = mutableMapOf<String, List<WordHistoryEntity>>()
-            val keys = rootObj.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                val value = rootObj.opt(key)
-                if (value is JSONObject && value.has("words")) {
-                    val wordsArray = value.getJSONArray("words")
-                    val items = parseJsonHistory(wordsArray.toString())
-                    notebooksMap[key] = items
-                } else if (value is JSONArray) {
-                    val items = parseJsonHistory(value.toString())
-                    notebooksMap[key] = items
+            // Case 3: Root object contains "notebooks" array
+            val notebooksArray = rootObj.optJSONArray("notebooks")
+            if (notebooksArray != null && notebooksArray.length() > 0) {
+                val packages = mutableListOf<ImportedNotebookPackage>()
+                for (i in 0 until notebooksArray.length()) {
+                    val itemObj = notebooksArray.getJSONObject(i)
+                    val name = itemObj.optString("notebook_name").ifBlank { itemObj.optString("notebookName", "Notizbuch ${i + 1}") }
+                    val wordsArray = itemObj.optJSONArray("words") ?: itemObj.optJSONArray("history")
+                    val items = if (wordsArray != null) parseJsonHistory(wordsArray.toString()) else emptyList()
+                    val settingsObj = itemObj.optJSONObject("settings")
+                    val settings = if (settingsObj != null) NotebookSettings.parseFromExportSettingsJson(settingsObj, name) else null
+                    packages.add(ImportedNotebookPackage(name, items, settings))
+                }
+                return when {
+                    packages.size == 1 -> ImportedJsonResult.SingleNotebook(packages[0].name, packages[0].words, packages[0].settings)
+                    packages.size > 1 -> ImportedJsonResult.MultipleNotebooks(packages)
+                    else -> ImportedJsonResult.EmptyOrInvalid
                 }
             }
 
-            if (notebooksMap.size > 1) {
-                return ImportedJsonResult.MultipleNotebooks(notebooksMap)
-            } else if (notebooksMap.size == 1) {
-                val entry = notebooksMap.entries.first()
-                return ImportedJsonResult.SingleNotebook(entry.key, entry.value)
+            // Case 4: Key-value map: { "Notebook1": { "settings": ..., "words": [...] }, ... }
+            val packages = mutableListOf<ImportedNotebookPackage>()
+            val keys = rootObj.keys()
+            val metadataKeys = setOf("version", "exported_at", "type", "description")
+
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (key in metadataKeys) continue
+
+                val value = rootObj.opt(key)
+                if (value is JSONObject) {
+                    val wordsArray = value.optJSONArray("words") ?: value.optJSONArray("history")
+                    val items = if (wordsArray != null) parseJsonHistory(wordsArray.toString()) else emptyList()
+                    val settingsObj = value.optJSONObject("settings")
+                    val settings = if (settingsObj != null) NotebookSettings.parseFromExportSettingsJson(settingsObj, key) else null
+                    if (items.isNotEmpty() || settings != null) {
+                        packages.add(ImportedNotebookPackage(key, items, settings))
+                    }
+                } else if (value is JSONArray) {
+                    val items = parseJsonHistory(value.toString())
+                    if (items.isNotEmpty()) {
+                        packages.add(ImportedNotebookPackage(key, items, null))
+                    }
+                }
+            }
+
+            return when {
+                packages.size > 1 -> ImportedJsonResult.MultipleNotebooks(packages)
+                packages.size == 1 -> ImportedJsonResult.SingleNotebook(packages[0].name, packages[0].words, packages[0].settings)
+                else -> ImportedJsonResult.EmptyOrInvalid
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing imported JSON", e)
@@ -610,29 +694,41 @@ class NotebookRepository(private val context: Context) {
     }
 
     /**
-     * Imports a single notebook as a brand-new notebook with the specified name.
+     * Imports a single notebook as a brand-new notebook with full settings restoration.
+     * Automatically applies a conflict-free unique name if needed.
      */
-    fun importSingleNotebookAsNew(name: String, words: List<WordHistoryEntity>): Notebook {
+    fun importSingleNotebookAsNew(
+        name: String,
+        words: List<WordHistoryEntity>,
+        importedSettings: NotebookSettings? = null
+    ): Notebook {
         val root = getRootDirectory()
-        val cleanName = sanitizeFileName(name).ifBlank { "Notizbuch" }
-        var folderName = cleanName
+        val uniqueName = resolveUniqueNotebookName(name)
+        val cleanFolderBase = sanitizeFileName(uniqueName).ifBlank { "Notizbuch" }
+        var folderName = cleanFolderBase
         var counter = 1
         while (File(root, folderName).exists()) {
-            folderName = "${cleanName}_$counter"
+            folderName = "${cleanFolderBase}_$counter"
             counter++
         }
 
         val targetDir = File(root, folderName).apply { mkdirs() }
-        val settings = NotebookSettings(notebookName = name)
-        File(targetDir, SETTINGS_FILE_NAME).writeText(settings.toJson())
+        val finalSettings = (importedSettings?.copy(
+            notebookName = uniqueName,
+            customApiKey = "",
+            openRouterApiKey = "",
+            storageFolderUri = ""
+        ) ?: NotebookSettings(notebookName = uniqueName))
+
+        File(targetDir, SETTINGS_FILE_NAME).writeText(finalSettings.toJson())
         File(targetDir, HISTORY_FILE_NAME).writeText(serializeHistoryToJson(words).toString(2))
 
         val notebook = Notebook(
             id = folderName,
-            name = settings.notebookName,
+            name = finalSettings.notebookName,
             lastModified = System.currentTimeMillis(),
             wordCount = words.size,
-            settings = settings
+            settings = finalSettings
         )
         setActiveNotebookId(folderName)
         return notebook
@@ -659,10 +755,10 @@ class NotebookRepository(private val context: Context) {
     /**
      * Imports multiple notebooks as separate individual notebooks.
      */
-    fun importMultipleNotebooksSeparate(notebooksMap: Map<String, List<WordHistoryEntity>>): List<Notebook> {
+    fun importMultipleNotebooksSeparate(packages: List<ImportedNotebookPackage>): List<Notebook> {
         val importedList = mutableListOf<Notebook>()
-        for ((name, words) in notebooksMap) {
-            val nb = importSingleNotebookAsNew(name, words)
+        for (pkg in packages) {
+            val nb = importSingleNotebookAsNew(pkg.name, pkg.words, pkg.settings)
             importedList.add(nb)
         }
         if (importedList.isNotEmpty()) {
@@ -674,8 +770,12 @@ class NotebookRepository(private val context: Context) {
     /**
      * Imports multiple notebooks combined as a single notebook.
      */
-    fun importMultipleNotebooksAsSingle(name: String, allWords: List<WordHistoryEntity>): Notebook {
-        return importSingleNotebookAsNew(name, allWords)
+    fun importMultipleNotebooksAsSingle(
+        name: String,
+        allWords: List<WordHistoryEntity>,
+        firstSettings: NotebookSettings? = null
+    ): Notebook {
+        return importSingleNotebookAsNew(name, allWords, firstSettings)
     }
 
     private fun sanitizeFileName(name: String): String {
@@ -763,12 +863,16 @@ class NotebookRepository(private val context: Context) {
 sealed class ImportedJsonResult {
     data class SingleNotebook(
         val detectedName: String,
-        val words: List<WordHistoryEntity>
+        val words: List<WordHistoryEntity>,
+        val settings: NotebookSettings? = null
     ) : ImportedJsonResult()
 
     data class MultipleNotebooks(
+        val packages: List<ImportedNotebookPackage>
+    ) : ImportedJsonResult() {
         val notebooks: Map<String, List<WordHistoryEntity>>
-    ) : ImportedJsonResult()
+            get() = packages.associate { it.name to it.words }
+    }
 
     object EmptyOrInvalid : ImportedJsonResult()
 }

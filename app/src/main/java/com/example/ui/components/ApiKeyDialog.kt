@@ -94,6 +94,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.AiModelInfo
 import com.example.data.ModelProvider
+import com.example.ui.i18n.AppLanguage
+import com.example.ui.i18n.AppStrings
 import com.example.ui.theme.AppThemePackage
 import com.example.ui.theme.GeoBorder
 import com.example.ui.theme.GeoOnPrimary
@@ -145,12 +147,16 @@ fun ApiKeyDialog(
     onRenameNotebook: ((String) -> Unit)? = null,
     themeMode: String = "auto",
     onThemeModeChange: ((String) -> Unit)? = null,
-    onOpenNotebookManager: (() -> Unit)? = null
+    onOpenNotebookManager: (() -> Unit)? = null,
+    appLanguage: String = "de",
+    onAppLanguageSelected: ((String) -> Unit)? = null,
+    onLanguageChange: ((String) -> Unit)? = null
 ) {
     var isKeyVisible by remember { mutableStateOf(false) }
     var modelDropdownExpanded by remember { mutableStateOf(false) }
     var modelSearchQuery by remember { mutableStateOf("") }
     var showFreeOnly by remember { mutableStateOf(true) }
+    val strings = remember(appLanguage) { AppStrings.get(appLanguage) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -168,8 +174,8 @@ fun ApiKeyDialog(
         }
     }
 
-    // Standard LTR layout for German / English interface
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+    // Direction based on selected language
+    CompositionLocalProvider(LocalLayoutDirection provides strings.language.layoutDirection) {
         BackHandler(enabled = true) {
             onDismiss()
         }
@@ -201,7 +207,7 @@ fun ApiKeyDialog(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Zurück zum Hauptbildschirm",
+                            contentDescription = strings.settingsBackDesc,
                             tint = GeoOnSurface,
                             modifier = Modifier.size(20.dp)
                         )
@@ -221,7 +227,7 @@ fun ApiKeyDialog(
                         )
                     }
                     Text(
-                        text = "Einstellungen & KI-Modelle",
+                        text = strings.settingsTitle,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = GeoOnSurface,
@@ -240,7 +246,7 @@ fun ApiKeyDialog(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     // ==============================================================
-                    // 0. Notizbuch & Design-Modus (Workbook & Theme Mode)
+                    // 0. Notizbuch & Design-Modus & Sprache (Workbook & Theme Mode & Language)
                     // ==============================================================
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -254,6 +260,7 @@ fun ApiKeyDialog(
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            // Active Notebook row
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -270,7 +277,7 @@ fun ApiKeyDialog(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        text = "Notizbuch: $activeNotebookName",
+                                        text = "${strings.notebookLabelPrefix} $activeNotebookName",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = GeoOnSurface
@@ -283,7 +290,7 @@ fun ApiKeyDialog(
                                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                     ) {
                                         Text(
-                                            text = "Alle verwalten",
+                                            text = strings.manageAllNotebooks,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = GeoPrimary
@@ -295,7 +302,7 @@ fun ApiKeyDialog(
                             // Theme Mode (Auto / Light / Dark)
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    text = "Design-Modus (hell / dunkel):",
+                                    text = strings.themeModeTitle,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = GeoOnSurfaceVariant
@@ -306,9 +313,9 @@ fun ApiKeyDialog(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     listOf(
-                                        Pair("auto", "System"),
-                                        Pair("light", "Hell"),
-                                        Pair("dark", "Dunkel")
+                                        Pair("auto", strings.themeModeAuto),
+                                        Pair("light", strings.themeModeLight),
+                                        Pair("dark", strings.themeModeDark)
                                     ).forEach { (modeKey, modeTitle) ->
                                         val isSelected = when (modeKey) {
                                             "light" -> themeMode.equals("light", ignoreCase = true) || themeMode.equals("hell", ignoreCase = true)
@@ -343,6 +350,51 @@ fun ApiKeyDialog(
                                     }
                                 }
                             }
+
+                            // Language Selector (Deutsch / English / العربية)
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = strings.languageSectionTitle,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = GeoOnSurfaceVariant
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    AppLanguage.entries.forEach { lang ->
+                                        val isSelected = lang.code.equals(appLanguage, ignoreCase = true)
+                                        OutlinedButton(
+                                            onClick = { (onAppLanguageSelected ?: onLanguageChange)?.invoke(lang.code) },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(34.dp)
+                                                .testTag("language_${lang.code}_button"),
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = BorderStroke(
+                                                width = if (isSelected) 1.5.dp else 1.dp,
+                                                color = if (isSelected) GeoPrimary else GeoBorder
+                                            ),
+                                            colors = ButtonDefaults.outlinedButtonColors(
+                                                containerColor = if (isSelected) GeoPrimaryContainer.copy(alpha = 0.5f) else GeoSurface,
+                                                contentColor = if (isSelected) GeoPrimary else GeoOnSurface
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = lang.nativeName,
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -362,7 +414,7 @@ fun ApiKeyDialog(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "KI-Anbieter",
+                                text = strings.aiProviderTitle,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = GeoOnSurface
@@ -430,20 +482,20 @@ fun ApiKeyDialog(
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            // German Label + Minimal English Hint
+                            // Label + Hint
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = if (selectedProvider == ModelProvider.OPENROUTER) "OpenRouter-Key" else "Gemini-Key",
+                                    text = if (selectedProvider == ModelProvider.OPENROUTER) strings.openRouterKeyLabel else strings.geminiKeyLabel,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = GeoOnSurface
                                 )
                                 Text(
-                                    text = if (selectedProvider == ModelProvider.OPENROUTER) "(from openrouter.ai/keys)" else "(from ai.google.dev)",
+                                    text = if (selectedProvider == ModelProvider.OPENROUTER) strings.openRouterKeyHint else strings.geminiKeyHint,
                                     fontSize = 10.sp,
                                     color = GeoOnSurfaceVariant,
                                     maxLines = 1,
@@ -537,9 +589,9 @@ fun ApiKeyDialog(
                                         color = GeoPrimary
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = "Prüfen...", fontSize = 11.sp)
+                                    Text(text = strings.testingKeyStatus, fontSize = 11.sp)
                                 } else {
-                                    Text(text = "Schlüssel testen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = strings.testKeyButton, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
@@ -600,12 +652,12 @@ fun ApiKeyDialog(
                             } else if (availableModels.isNotEmpty()) {
                                 availableModels.first().id
                             } else {
-                                if (selectedProvider == ModelProvider.OPENROUTER) "openrouter/free" else "Kein Modell geladen"
+                                if (selectedProvider == ModelProvider.OPENROUTER) "openrouter/free" else strings.noModelsFound
                             }
                             val isFreeRouter = selectedProvider == ModelProvider.OPENROUTER &&
                                     (effectiveId == "openrouter/free" || activeModelInfo?.tier?.contains("Free", ignoreCase = true) == true)
 
-                            // Header row with Label, English hint, and action buttons
+                            // Header row with Label, Provider hint, and action buttons
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -616,7 +668,7 @@ fun ApiKeyDialog(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        text = "Aktives Modell",
+                                        text = strings.activeModelTitle,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = GeoOnSurface
@@ -651,7 +703,7 @@ fun ApiKeyDialog(
                                         } else {
                                             Icon(
                                                 imageVector = Icons.Default.Refresh,
-                                                contentDescription = "Refresh",
+                                                contentDescription = strings.refreshModelsButton,
                                                 tint = GeoPrimary,
                                                 modifier = Modifier.size(16.dp)
                                             )
@@ -672,7 +724,7 @@ fun ApiKeyDialog(
                                         ),
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                     ) {
-                                        Text(text = "Auswählen ▼", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(text = "${strings.selectModelButton} ▼", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -729,7 +781,7 @@ fun ApiKeyDialog(
                                     OutlinedTextField(
                                         value = modelSearchQuery,
                                         onValueChange = { modelSearchQuery = it },
-                                        placeholder = { Text("Modell suchen...", fontSize = 11.sp) },
+                                        placeholder = { Text(strings.searchPlaceholder, fontSize = 11.sp) },
                                         singleLine = true,
                                         leadingIcon = {
                                             Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -752,7 +804,7 @@ fun ApiKeyDialog(
                                             onClick = { showFreeOnly = !showFreeOnly },
                                             label = {
                                                 Text(
-                                                    if (selectedProvider == ModelProvider.GEMINI) "Nur Flash" else "Nur Free",
+                                                    if (selectedProvider == ModelProvider.GEMINI) "Nur Flash" else strings.filterFreeOnly,
                                                     fontSize = 10.sp
                                                 )
                                             },
@@ -765,7 +817,7 @@ fun ApiKeyDialog(
                                             )
                                         )
                                         Text(
-                                            text = "${availableModels.size} Modelle",
+                                            text = "${availableModels.size} ${strings.words}",
                                             fontSize = 10.sp,
                                             color = GeoOnSurfaceVariant
                                         )
@@ -789,9 +841,9 @@ fun ApiKeyDialog(
                                         text = {
                                             Text(
                                                 if (selectedProvider == ModelProvider.GEMINI)
-                                                    "Keine Modelle geladen. Bitte Schlüssel eingeben & auf 'Schlüssel testen' tippen."
+                                                    strings.loadingModelsStatus
                                                 else
-                                                    "Keine Modelle geladen.",
+                                                    strings.noModelsFound,
                                                 fontSize = 11.sp,
                                                 color = GeoOnSurfaceVariant
                                             )
@@ -800,7 +852,7 @@ fun ApiKeyDialog(
                                     )
                                 } else if (filteredModels.isEmpty()) {
                                     DropdownMenuItem(
-                                        text = { Text("Keine passenden Modelle gefunden", fontSize = 11.sp, color = GeoOnSurfaceVariant) },
+                                        text = { Text(strings.noModelsFound, fontSize = 11.sp, color = GeoOnSurfaceVariant) },
                                         onClick = {}
                                     )
                                 } else {
@@ -879,29 +931,18 @@ fun ApiKeyDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = "Tägliches Limit: $totalDailyQuota ($remainingDailyRequests übrig)",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = GeoOnSurfaceVariant
-                                    )
-                                    Text(
-                                        text = "(daily limit)",
-                                        fontSize = 10.sp,
-                                        color = GeoOnSurfaceVariant.copy(alpha = 0.7f)
-                                    )
-                                }
+                                Text(
+                                    text = strings.remainingDailyRequests(remainingDailyRequests, totalDailyQuota),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = GeoOnSurfaceVariant
+                                )
                             }
                         }
                     }
 
                     // ==============================================================
-                    // 4. Farbschema (Theme Selection: Rot, Türkis, Grün, Blau, Violett)
-                    // Single horizontal row with equal weight distribution & 24dp circles
+                    // 4. Farbschema (Theme Selection)
                     // ==============================================================
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -916,7 +957,7 @@ fun ApiKeyDialog(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Farbschema (Material 3 Erdtöne)",
+                                text = strings.colorSchemeTitle,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = GeoOnSurface
@@ -924,7 +965,7 @@ fun ApiKeyDialog(
 
                             // 1. Rotbraun & Terracotta (Warm Earth)
                             Text(
-                                text = "Rotbraun & Terracotta",
+                                text = strings.themeWarmEarth,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = GeoPrimary
@@ -965,7 +1006,7 @@ fun ApiKeyDialog(
 
                             // 2. Sand & Beige (Neutral Warm)
                             Text(
-                                text = "Sand & Beige",
+                                text = strings.themeSlateSand,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = GeoPrimary
@@ -1006,7 +1047,7 @@ fun ApiKeyDialog(
 
                             // 3. Grau & Schiefer (Cool Earth)
                             Text(
-                                text = "Grau & Schiefer",
+                                text = strings.themeMossSage,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = GeoPrimary
@@ -1047,7 +1088,7 @@ fun ApiKeyDialog(
 
                             // 4. Braun & Umbra (Deep Earth)
                             Text(
-                                text = "Braun & Umbra",
+                                text = strings.themeOceanPetrol,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = GeoPrimary
@@ -1088,7 +1129,7 @@ fun ApiKeyDialog(
 
                             // 5. Gedämpfte Töne (Lehm & Stein)
                             Text(
-                                text = "Gedämpfte Töne (Kraut & Stein)",
+                                text = strings.themePlumLavender,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = GeoPrimary
@@ -1149,7 +1190,7 @@ fun ApiKeyDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Speicherort für Verlauf",
+                                    text = strings.historyStorageTitle,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = GeoOnSurface
@@ -1169,12 +1210,12 @@ fun ApiKeyDialog(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Aktueller Ordner:",
+                                        text = strings.currentFolderLabel,
                                         fontSize = 10.sp,
                                         color = GeoOnSurfaceVariant
                                     )
                                     Text(
-                                        text = if (selectedHistoryFolderName.isNotBlank()) selectedHistoryFolderName else "Kein Ordner ausgewählt",
+                                        text = if (selectedHistoryFolderName.isNotBlank()) selectedHistoryFolderName else strings.noFolderSelected,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = GeoOnSurface,
@@ -1192,13 +1233,13 @@ fun ApiKeyDialog(
                                         .testTag("change_history_folder_button")
                                 ) {
                                     Text(
-                                        text = if (selectedHistoryFolderName.isBlank() || selectedHistoryFolderName == "Kein Ordner ausgewählt") "Ordner auswählen" else "Ordner ändern",
+                                        text = if (selectedHistoryFolderName.isBlank() || selectedHistoryFolderName == "Kein Ordner ausgewählt") strings.changeFolderButton else strings.changeFolderButton,
                                         fontSize = 11.sp
                                     )
                                 }
                             }
 
-                            // Import: Single button only, no checkboxes or extra text
+                            // Import: Single button
                             Button(
                                 onClick = {
                                     importFilePickerLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
@@ -1214,7 +1255,7 @@ fun ApiKeyDialog(
                                     .testTag("import_history_button")
                             ) {
                                 Text(
-                                    text = "📂 Verlauf importieren",
+                                    text = "📂 ${strings.importHistoryButton}",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -1243,7 +1284,7 @@ fun ApiKeyDialog(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Clear,
-                                            contentDescription = "Schließen",
+                                            contentDescription = strings.close,
                                             tint = GeoPrimary,
                                             modifier = Modifier.size(12.dp)
                                         )
@@ -1274,7 +1315,7 @@ fun ApiKeyDialog(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = GeoOnSurface)
                     ) {
                         Text(
-                            text = "Schließen",
+                            text = strings.close,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -1293,7 +1334,7 @@ fun ApiKeyDialog(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "Speichern",
+                            text = strings.save,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )

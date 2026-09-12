@@ -235,15 +235,11 @@ class WordRepository(
     suspend fun syncHistoryOnStartup() = withContext(Dispatchers.IO) {
         if (notebookRepository != null) {
             val notebookItems = notebookRepository.loadActiveHistory()
-            val roomItems = historyDao.getAllHistoryList()
+            historyDao.clearAll()
             if (notebookItems.isNotEmpty()) {
-                historyDao.clearAll()
                 historyDao.insertAll(notebookItems)
-                return@withContext
-            } else if (roomItems.isNotEmpty()) {
-                notebookRepository.saveActiveHistory(roomItems)
-                return@withContext
             }
+            return@withContext
         }
 
         val storage = externalHistoryStorage ?: return@withContext
@@ -331,25 +327,30 @@ class WordRepository(
         val importedItems = storage.readHistoryFromUri(fileUri)
         if (importedItems.isEmpty()) return 0
 
-        if (replace) {
-            historyDao.clearAll()
-            historyDao.insertAll(importedItems)
+        val currentNotebookItems = notebookRepository?.loadActiveHistory() ?: historyDao.getAllHistoryList()
+        val updatedList = if (replace) {
+            importedItems
         } else {
-            // Merge (default): insert items without wiping current items
-            val existing = historyDao.getAllHistoryList()
-            val existingKeys = existing.map { "${it.word.lowercase()}_${it.type.lowercase()}" }.toSet()
-            val toInsert = importedItems.filter {
-                val key = "${it.word.lowercase()}_${it.type.lowercase()}"
-                !existingKeys.contains(key)
+            // Merge into active notebook ONLY
+            val currentKeyMap = currentNotebookItems.associateBy { "${it.word.trim().lowercase()}_${it.type.trim().lowercase()}" }.toMutableMap()
+            for (item in importedItems) {
+                val key = "${item.word.trim().lowercase()}_${item.type.trim().lowercase()}"
+                currentKeyMap[key] = item
             }
-            if (toInsert.isNotEmpty()) {
-                historyDao.insertAll(toInsert)
-            }
+            currentKeyMap.values.sortedByDescending { it.timestamp }
         }
 
-        // Immediately update external storage with the new full history
-        val fullList = historyDao.getAllHistoryList()
-        storage.saveHistory(fullList)
+        // Save strictly to the active notebook without touching any other notebooks
+        notebookRepository?.saveActiveHistory(updatedList)
+
+        // Reload Room with active notebook items only
+        historyDao.clearAll()
+        if (updatedList.isNotEmpty()) {
+            historyDao.insertAll(updatedList)
+        }
+
+        // Update external storage for active notebook if configured
+        storage.saveHistory(updatedList)
         return importedItems.size
     }
 }

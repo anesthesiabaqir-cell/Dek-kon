@@ -47,13 +47,12 @@ object DeclensionHistoryExportHelper {
 
     val HEADERS = listOf(
         "Nomen (Singular)",
-        "Plural",
+        "Genus",
         "English translation",
         "Nominativ (Sg./Pl.)",
         "Akkusativ (Sg./Pl.)",
         "Genitiv (Sg./Pl.)",
-        "Dativ (Sg./Pl.)",
-        "Genus"
+        "Dativ (Sg./Pl.)"
     )
 
     val HEADERS_WITH_NR = listOf("Nr.") + HEADERS
@@ -282,23 +281,21 @@ object DeclensionHistoryExportHelper {
 
     data class WordExportRow(
         val nomenSingular: String,
-        val plural: String = "",
+        val genus: String,
         val englishTranslation: String,
         val nominativ: String,
         val akkusativ: String,
         val genitiv: String,
-        val dativ: String,
-        val genus: String
+        val dativ: String
     ) {
         fun toList(): List<String> = listOf(
             nomenSingular,
-            plural,
+            genus,
             englishTranslation,
             nominativ,
             akkusativ,
             genitiv,
-            dativ,
-            genus
+            dativ
         )
     }
 
@@ -542,13 +539,12 @@ object DeclensionHistoryExportHelper {
             result.add(
                 WordExportRow(
                     nomenSingular = nomenSingular,
-                    plural = pluralForm,
+                    genus = genus,
                     englishTranslation = translation,
                     nominativ = nominativ,
                     akkusativ = akkusativ,
                     genitiv = genitiv,
-                    dativ = dativ,
-                    genus = genus
+                    dativ = dativ
                 )
             )
         }
@@ -1923,7 +1919,7 @@ object DeclensionHistoryExportHelper {
                             boldCellPaint = nounBoldCellPaint,
                             zebraPaint = zebraPaint,
                             gridPaint = gridBorderPaint,
-                            genderColumnIndex = 8,
+                            genderColumnIndex = HEADERS_WITH_NR.indexOf("Genus"),
                             maskulinPaint = maskulinPaint,
                             femininPaint = femininPaint,
                             neutrumPaint = neutrumPaint
@@ -2188,13 +2184,12 @@ object DeclensionHistoryExportHelper {
         <thead>
             <tr>
                 <th>Nomen (Singular)</th>
-                <th>Plural</th>
+                <th>Genus</th>
                 <th>English translation</th>
                 <th>Nominativ (Sg./Pl.)</th>
                 <th>Akkusativ (Sg./Pl.)</th>
                 <th>Genitiv (Sg./Pl.)</th>
                 <th>Dativ (Sg./Pl.)</th>
-                <th>Genus</th>
             </tr>
         </thead>
         <tbody>
@@ -2211,13 +2206,12 @@ object DeclensionHistoryExportHelper {
             sb.append("""
             <tr class="data-row">
                 <td class="bold-noun">${escapeXml(row.nomenSingular)}</td>
-                <td class="bold-noun">${escapeXml(row.plural)}</td>
+                <td class="bold-noun $genderClass">${escapeXml(row.genus)}</td>
                 <td class="translation-col">${escapeXml(row.englishTranslation)}</td>
                 <td>${escapeXml(row.nominativ)}</td>
                 <td>${escapeXml(row.akkusativ)}</td>
                 <td>${escapeXml(row.genitiv)}</td>
                 <td>${escapeXml(row.dativ)}</td>
-                <td class="bold-noun $genderClass">${escapeXml(row.genus)}</td>
             </tr>
             """.trimIndent())
         }
@@ -2381,13 +2375,12 @@ object DeclensionHistoryExportHelper {
         <thead>
             <tr>
                 <th>Nomen (Singular)</th>
-                <th>Plural</th>
+                <th>Genus</th>
                 <th>English translation</th>
                 <th>Nominativ (Sg./Pl.)</th>
                 <th>Akkusativ (Sg./Pl.)</th>
                 <th>Genitiv (Sg./Pl.)</th>
                 <th>Dativ (Sg./Pl.)</th>
-                <th>Genus</th>
             </tr>
         </thead>
         <tbody>
@@ -2403,13 +2396,12 @@ object DeclensionHistoryExportHelper {
                 sb.append("""
             <tr class="data-row">
                 <td class="bold-cell">${escapeXml(r.nomenSingular)}</td>
-                <td class="bold-cell">${escapeXml(r.plural)}</td>
+                <td class="bold-cell $genderClass">${escapeXml(r.genus)}</td>
                 <td>${escapeXml(r.englishTranslation)}</td>
                 <td>${escapeXml(r.nominativ)}</td>
                 <td>${escapeXml(r.akkusativ)}</td>
                 <td>${escapeXml(r.genitiv)}</td>
                 <td>${escapeXml(r.dativ)}</td>
-                <td class="bold-cell $genderClass">${escapeXml(r.genus)}</td>
             </tr>
 """.trimIndent())
             }
