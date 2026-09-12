@@ -29,7 +29,9 @@ import com.example.ui.theme.AppThemePackage
 import com.example.ui.theme.ThemePreferences
 import com.example.util.ExportSharingManager
 import com.example.util.GermanTtsManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -256,7 +258,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(searchQuery = newQuery)
     }
 
+    private var activeSearchJob: Job? = null
+
+    fun cancelSearch() {
+        activeSearchJob?.cancel()
+        activeSearchJob = null
+        _uiState.value = _uiState.value.copy(
+            isSearching = false
+        )
+    }
+
     fun onSearch(specificQuery: String? = null) {
+        if (_uiState.value.isSearching) {
+            cancelSearch()
+            return
+        }
+
         val targetQuery = specificQuery ?: _uiState.value.searchQuery
         val trimmed = targetQuery.trim()
         if (trimmed.isEmpty()) {
@@ -269,6 +286,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // Support rule: reject inputs containing commas
+        if (trimmed.contains(",")) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Eingaben mit Kommas werden nicht unterstützt. Bitte geben Sie ein Wort oder einen Satz ohne Kommas ein."
+            )
+            return
+        }
+
+        // Detection rule: 2 or more words (separated by spaces) = Sentence, 1 word = Noun or Verb
+        val words = trimmed.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val isSentence = words.size >= 2
+
         val hasKey = repository.isApiKeyConfigured()
         if (!hasKey) {
             val providerName = _uiState.value.selectedProvider.displayName
@@ -279,7 +308,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        viewModelScope.launch {
+        activeSearchJob?.cancel()
+        activeSearchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isSearching = true,
                 errorMessage = null,
@@ -287,7 +317,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             try {
-                if (_uiState.value.selectedGrammarType == GrammarType.VERB) {
+                if (isSentence) {
+                    val sentenceResult = repository.searchGrammar(trimmed, GrammarType.SENTENCE)
+                    refreshUsageQuota()
+                    val declension = when (sentenceResult) {
+                        is GrammarResult.Sentence -> sentenceResult.declension
+                        is GrammarResult.Noun -> sentenceResult.declension
+                        is GrammarResult.Verb -> throw IllegalStateException("Unerwartetes Ergebnis")
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        isSearching = false,
+                        currentResult = declension,
+                        currentGrammarResult = GrammarResult.Sentence(declension),
+                        errorMessage = null
+                    )
+                } else if (_uiState.value.selectedGrammarType == GrammarType.VERB) {
                     val verbResult = repository.searchVerb(trimmed)
                     refreshUsageQuota()
                     _uiState.value = _uiState.value.copy(
@@ -306,11 +350,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         errorMessage = null
                     )
                 }
+            } catch (e: CancellationException) {
+                _uiState.value = _uiState.value.copy(
+                    isSearching = false
+                )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSearching = false,
                     errorMessage = e.message ?: "Fehler beim Abrufen der Grammatikdaten."
                 )
+            } finally {
+                if (activeSearchJob == coroutineContext[Job]) {
+                    activeSearchJob = null
+                }
             }
         }
     }
@@ -319,6 +371,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val isVerb = entity.type.equals("Verb", ignoreCase = true)
+                val isSentence = entity.type.equals("Satz", ignoreCase = true) ||
+                        entity.type.equals("Sentence", ignoreCase = true) ||
+                        entity.gender.equals("Satz", ignoreCase = true) ||
+                        entity.word.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.size >= 2
+
                 if (isVerb) {
                     val cachedVerb = withContext(Dispatchers.Default) {
                         VerbConjugationResult.fromJson(entity.rawJsonResult)
@@ -327,6 +384,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         selectedGrammarType = GrammarType.VERB,
                         currentGrammarResult = GrammarResult.Verb(cachedVerb),
                         currentResult = null,
+                        searchQuery = entity.word,
+                        errorMessage = null
+                    )
+                } else if (isSentence) {
+                    val cachedResult = withContext(Dispatchers.Default) {
+                        WordDeclensionResult.fromJson(entity.rawJsonResult)
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        currentResult = cachedResult,
+                        currentGrammarResult = GrammarResult.Sentence(cachedResult),
                         searchQuery = entity.word,
                         errorMessage = null
                     )
@@ -789,6 +856,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     nouns.add(curr.declension)
                 }
             }
+            is GrammarResult.Sentence -> {
+                val k = curr.declension.word.trim().lowercase(java.util.Locale.GERMAN)
+                if (seenNouns.add(k)) {
+                    nouns.add(curr.declension)
+                }
+            }
             is GrammarResult.Verb -> {
                 val k = curr.conjugation.infinitiv.trim().lowercase(java.util.Locale.GERMAN)
                 if (seenVerbs.add(k)) {
@@ -927,7 +1000,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createNotebook(name: String, themeColorId: String = "Schiefer", themeMode: String = "auto") {
+    fun createNotebook(name: String, themeColorId: String = "Dunkelblau", themeMode: String = "auto") {
         viewModelScope.launch {
             val notebook = notebookRepository.createNotebook(name, themeColorId, themeMode)
             selectNotebook(notebook.id)

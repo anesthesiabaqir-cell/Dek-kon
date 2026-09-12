@@ -91,7 +91,7 @@ class DeclensionHistoryExportHelperTest {
             org.junit.Assert.assertFalse(sheetContent.contains("Deutsche Konjugationstabellen"))
 
             assertTrue(sheetContent.contains("Nr."))
-            assertTrue(sheetContent.contains("Nomen (Singular)"))
+            assertTrue(sheetContent.contains("Nomen und Sätze"))
             assertTrue(sheetContent.contains("Genus"))
             assertTrue(sheetContent.contains("English translation"))
             assertTrue(sheetContent.contains("Nominativ (Sg./Pl.)"))
@@ -122,7 +122,7 @@ class DeclensionHistoryExportHelperTest {
         assertTrue(html.contains("<h1>$customTitle</h1>"))
         org.junit.Assert.assertFalse(html.contains("class=\"subtitle\""))
         org.junit.Assert.assertFalse(html.contains("Horizontale Übersicht der gesuchten Nomen"))
-        assertTrue(html.contains("<th>Nomen (Singular)</th>"))
+        assertTrue(html.contains("<th>Nomen und Sätze</th>"))
         assertTrue(html.contains("<th>Genus</th>"))
         assertTrue(html.contains("<th>English translation</th>"))
         org.junit.Assert.assertFalse(html.contains("<th>Plural</th>"))
@@ -479,5 +479,36 @@ class DeclensionHistoryExportHelperTest {
             // Android PdfDocument requires native graphics libraries that are mocked in headless Robolectric JVM tests
             assertTrue(e is IllegalStateException || e is UnsupportedOperationException)
         }
+    }
+
+    @Test
+    fun testSentenceExportRowStructure() {
+        val sentence = WordDeclensionResult(
+            word = "Wie geht es dir",
+            gender = "–",
+            genderArticle = "",
+            pluralNoun = "",
+            meaningEnglish = "How are you",
+            singular = DeclensionTableGroup("Singular", emptyList()),
+            plural = DeclensionTableGroup("Plural", emptyList())
+        )
+        val noun = createSampleWord("Buch", "das", "die Bücher", "book")
+
+        val rows = DeclensionHistoryExportHelper.buildDeduplicatedRows(listOf(noun, sentence))
+        assertEquals(2, rows.size)
+
+        // Row 1: Noun
+        assertEquals("das Buch", rows[0].nomenSingular)
+        assertEquals("Neutrum", rows[0].genus)
+        assertEquals("book", rows[0].englishTranslation)
+
+        // Row 2: Sentence
+        assertEquals("Wie geht es dir", rows[1].nomenSingular)
+        assertEquals("–", rows[1].genus)
+        assertEquals("How are you", rows[1].englishTranslation)
+        assertEquals("–", rows[1].nominativ)
+        assertEquals("–", rows[1].akkusativ)
+        assertEquals("–", rows[1].genitiv)
+        assertEquals("–", rows[1].dativ)
     }
 }

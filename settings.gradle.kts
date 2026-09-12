@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Deklination"
+rootProject.name = "Deklination & Konjugation"
 include(":app")

@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -100,7 +101,11 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.notebook.Notebook
 import com.example.ui.i18n.AppStrings
 import com.example.ui.theme.AppThemePackage
+import androidx.compose.ui.graphics.Brush
+import com.example.ui.theme.GeoBannerGradient
 import com.example.ui.theme.GeoBorder
+import com.example.ui.theme.GeoCardRibbonColor
+import com.example.ui.theme.GeoIsBoldTheme
 import com.example.ui.theme.GeoOnPrimary
 import com.example.ui.theme.GeoOnSurface
 import com.example.ui.theme.GeoOnSurfaceVariant
@@ -315,7 +320,7 @@ fun CreateNotebookDialog(
     appLanguage: String = "de"
 ) {
     var notebookName by remember { mutableStateOf("") }
-    var selectedThemeId by remember { mutableStateOf("Schiefer") }
+    var selectedThemeId by remember { mutableStateOf("Dunkelblau") }
     var selectedThemeMode by remember { mutableStateOf("auto") }
     val strings = remember(appLanguage) { AppStrings.get(appLanguage) }
 
@@ -383,6 +388,55 @@ fun CreateNotebookDialog(
                             cursorColor = GeoPrimary
                         )
                     )
+
+                    // Theme Color Options (The 6 M3 Colors: Gelb, Dunkelblau, Hellgrau, Weiß, Dunkelgrau, Rot)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = strings.notebookColorLabel,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GeoOnSurface,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AppThemePackage.M3_THEMES.forEach { theme ->
+                                val isSelected = theme.id.equals(selectedThemeId, ignoreCase = true)
+                                val checkTint = if (theme == AppThemePackage.WEISS || theme == AppThemePackage.HELLGRAU || theme == AppThemePackage.GELB) {
+                                    Color(0xFF1E1A16)
+                                } else {
+                                    Color.White
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(theme.swatch)
+                                        .border(
+                                            width = if (isSelected) 2.5.dp else 1.dp,
+                                            color = if (isSelected) GeoPrimary else Color(0x33000000),
+                                            shape = CircleShape
+                                        )
+                                        .clickable { selectedThemeId = theme.id },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = checkTint,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Theme Mode Selector
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -562,8 +616,19 @@ fun NotebookManagerDialog(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainer
                     ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    border = BorderStroke(
+                        if (GeoIsBoldTheme) 1.5.dp else 1.dp,
+                        if (GeoIsBoldTheme) GeoCardRibbonColor.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
                 ) {
+                    if (GeoIsBoldTheme) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.5.dp)
+                                .background(Brush.horizontalGradient(GeoBannerGradient))
+                        )
+                    }
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -903,6 +968,12 @@ fun NotebookManagerDialog(
                                     SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.GERMAN).format(Date(notebook.lastModified))
                                 }
                                 var showMenu by remember { mutableStateOf(false) }
+                                val boldGradColors = remember(theme) {
+                                    listOf(Color(theme.bannerGradientStartLightHex), Color(theme.bannerGradientEndLightHex))
+                                }
+                                val ribbonCol = remember(theme) {
+                                    Color(theme.cardAccentRibbonLightHex)
+                                }
 
                                 Card(
                                     modifier = Modifier
@@ -917,10 +988,22 @@ fun NotebookManagerDialog(
                                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                                     ),
                                     border = BorderStroke(
-                                        if (isActive) 1.5.dp else 1.dp,
-                                        if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                        if (isActive) (if (theme.isBoldTheme) 2.dp else 1.5.dp) else 1.dp,
+                                        if (isActive) {
+                                            if (theme.isBoldTheme) ribbonCol else MaterialTheme.colorScheme.primary
+                                        } else {
+                                            if (theme.isBoldTheme) ribbonCol.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                        }
                                     )
                                 ) {
+                                    if (theme.isBoldTheme) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(2.5.dp)
+                                                .background(Brush.horizontalGradient(boldGradColors))
+                                        )
+                                    }
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -940,9 +1023,12 @@ fun NotebookManagerDialog(
                                             ) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(9.dp)
+                                                        .size(if (theme.isBoldTheme) 11.dp else 9.dp)
                                                         .clip(CircleShape)
-                                                        .background(theme.primary)
+                                                        .then(
+                                                            if (theme.isBoldTheme) Modifier.background(Brush.horizontalGradient(boldGradColors))
+                                                            else Modifier.background(theme.primary)
+                                                        )
                                                 )
 
                                                 Text(
@@ -963,8 +1049,8 @@ fun NotebookManagerDialog(
                                             if (isActive) {
                                                 Surface(
                                                     shape = RoundedCornerShape(12.dp),
-                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                                                    color = if (theme.isBoldTheme) ribbonCol.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                    border = BorderStroke(1.dp, if (theme.isBoldTheme) ribbonCol else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                                                 ) {
                                                     Row(
                                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -977,7 +1063,7 @@ fun NotebookManagerDialog(
                                                         )
                                                         Text(
                                                             text = strings.activeNotebookBadge,
-                                                            color = MaterialTheme.colorScheme.primary,
+                                                            color = if (theme.isBoldTheme) ribbonCol else MaterialTheme.colorScheme.primary,
                                                             fontSize = 12.sp,
                                                             fontWeight = FontWeight.Bold,
                                                             maxLines = 1,

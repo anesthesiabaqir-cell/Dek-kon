@@ -8,7 +8,7 @@ import org.json.JSONObject
  */
 data class NotebookSettings(
     val notebookName: String = "Allgemein",
-    val themeColorId: String = "Schiefer",
+    val themeColorId: String = "Dunkelblau",
     val themeMode: String = "auto", // "auto", "light", "dark"
     val selectedProvider: String = "GEMINI",
     val selectedModel: String = "gemini-2.5-flash-latest",

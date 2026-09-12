@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
@@ -106,6 +107,7 @@ import com.example.ui.components.NotebookSwitcher
 import com.example.ui.components.PostImportApiKeyDialog
 import com.example.ui.components.PrintExportDialog
 import com.example.ui.components.SelectNotebooksExportDialog
+import com.example.ui.components.SentenceResultView
 import com.example.ui.components.SprechTempoControl
 import com.example.ui.components.VerbConjugationResultView
 import com.example.ui.components.historySectionItems
@@ -113,6 +115,11 @@ import com.example.util.ExportSharingManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import androidx.compose.ui.graphics.Brush
+import com.example.ui.theme.GeoBannerGradient
+import com.example.ui.theme.GeoCardRibbonColor
+import com.example.ui.theme.GeoGlowColor
+import com.example.ui.theme.GeoIsBoldTheme
 import com.example.ui.theme.GeoBackground
 import com.example.ui.theme.GeoBorder
 import com.example.ui.theme.GeoOnPrimaryContainer
@@ -370,9 +377,13 @@ fun MainScreen(
                             .padding(horizontal = 16.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        GrammarType.values().forEach { type ->
-                            val isSelected = uiState.selectedGrammarType == type
-                            val bg = if (isSelected) GeoPrimary else GeoSurfaceVariant
+                        val searchTypes = listOf(
+                            GrammarType.NOMEN to "Nomen & Sätze",
+                            GrammarType.VERB to "Verb"
+                        )
+                        searchTypes.forEach { (type, label) ->
+                            val isSelected = uiState.selectedGrammarType == type ||
+                                (type == GrammarType.NOMEN && uiState.selectedGrammarType == GrammarType.SENTENCE)
                             val textColor = if (isSelected) Color.White else GeoOnSurfaceVariant
                             val icon = if (type == GrammarType.NOMEN) Icons.Default.Description else Icons.Default.Bolt
 
@@ -380,8 +391,21 @@ fun MainScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(bg)
-                                    .border(1.dp, if (isSelected) GeoPrimary else GeoBorder, RoundedCornerShape(12.dp))
+                                    .then(
+                                        if (isSelected) {
+                                            if (GeoIsBoldTheme) Modifier.background(Brush.horizontalGradient(GeoBannerGradient))
+                                            else Modifier.background(GeoPrimary)
+                                        } else {
+                                            Modifier.background(GeoSurfaceVariant)
+                                        }
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) {
+                                            if (GeoIsBoldTheme) GeoCardRibbonColor else GeoPrimary
+                                        } else GeoBorder,
+                                        RoundedCornerShape(12.dp)
+                                    )
                                     .clickable { viewModel.onGrammarTypeSelected(type) }
                                     .padding(vertical = 9.dp),
                                 contentAlignment = Alignment.Center
@@ -397,7 +421,7 @@ fun MainScreen(
                                         modifier = Modifier.size(17.dp)
                                     )
                                     Text(
-                                        text = if (type == GrammarType.NOMEN) "Nomen" else "Verb",
+                                        text = label,
                                         fontSize = 13.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         color = textColor,
@@ -418,15 +442,19 @@ fun MainScreen(
                             .padding(horizontal = 16.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Search Input Field Container (match_parent remaining width, 8dp inner left/right padding)
+                        // Search Input Field Container (match_parent remaining width, inner left/right padding)
                         Row(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(GeoSurfaceVariant)
-                                .border(1.dp, GeoBorder, RoundedCornerShape(12.dp))
-                                .padding(start = 8.dp, end = 8.dp),
+                                .border(
+                                    if (GeoIsBoldTheme) 1.5.dp else 1.dp,
+                                    if (GeoIsBoldTheme) GeoGlowColor.copy(alpha = 0.5f) else GeoBorder,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .padding(start = 8.dp, end = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Leading search icon
@@ -434,10 +462,10 @@ fun MainScreen(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
                                 tint = GeoPrimary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
 
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(5.dp))
 
                             // Text Field + Placeholder Area
                             Box(
@@ -449,9 +477,9 @@ fun MainScreen(
                                         text = if (uiState.selectedGrammarType == GrammarType.VERB) {
                                             "Suche nach Verben"
                                         } else {
-                                            "Suche nach Nomen"
+                                            "Suche nach Nomen & Sätze"
                                         },
-                                        fontSize = 14.sp,
+                                        fontSize = 12.sp,
                                         color = GeoOnSurfaceVariant,
                                         maxLines = 1,
                                         softWrap = false,
@@ -465,7 +493,7 @@ fun MainScreen(
                                     singleLine = true,
                                     maxLines = 1,
                                     textStyle = TextStyle(
-                                        fontSize = 14.sp,
+                                        fontSize = 13.sp,
                                         color = GeoOnSurface
                                     ),
                                     cursorBrush = SolidColor(GeoPrimary),
@@ -496,26 +524,42 @@ fun MainScreen(
                         // Margin between elements: 8dp between the search field and the search button
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Search Submit Button
+                        // Search Submit Button (Changes shape and triggers cancellation when a search is running)
                         Button(
                             onClick = { viewModel.onSearch() },
-                            enabled = !uiState.isSearching,
+                            enabled = true,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = GeoPrimary,
+                                containerColor = if (uiState.isSearching) MaterialTheme.colorScheme.error else (if (GeoIsBoldTheme) GeoCardRibbonColor else GeoPrimary),
                                 contentColor = Color.White
                             ),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = if (uiState.isSearching) RoundedCornerShape(24.dp) else RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .height(48.dp)
                                 .testTag("search_submit_button"),
-                            contentPadding = PaddingValues(horizontal = 16.dp)
+                            contentPadding = PaddingValues(horizontal = if (uiState.isSearching) 12.dp else 14.dp)
                         ) {
                             if (uiState.isSearching) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.Stop,
+                                        contentDescription = "Suche abbrechen",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "Stoppen",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             } else {
                                 Text(
                                     text = "Suchen",
@@ -569,7 +613,9 @@ fun MainScreen(
                                 )
                                 Spacer(modifier = Modifier.width(14.dp))
                                 Text(
-                                    text = if (uiState.selectedGrammarType == GrammarType.VERB) {
+                                    text = if (uiState.searchQuery.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.size >= 2) {
+                                        "Satz wird übersetzt..."
+                                    } else if (uiState.selectedGrammarType == GrammarType.VERB) {
                                         "Konjugationstabelle wird analysiert..."
                                     } else {
                                         "Deklinationstabelle wird analysiert..."
@@ -583,7 +629,7 @@ fun MainScreen(
                     }
                 }
 
-                // Grammar Result View: Noun or Verb
+                // Grammar Result View: Noun, Verb, or Sentence
                 val hasActiveResult = (uiState.currentGrammarResult != null || uiState.currentResult != null) && !uiState.isSearching
                 if (hasActiveResult) {
                     item(key = "active_grammar_result") {
@@ -607,17 +653,33 @@ fun MainScreen(
                                     onTtsSpeedChange = { viewModel.setTtsSpeed(it) }
                                 )
                             }
+                            is GrammarResult.Sentence -> {
+                                SentenceResultView(
+                                    result = grammarRes.declension,
+                                    onSpeak = { viewModel.speakGerman(it) }
+                                )
+                            }
                             null -> {
                                 uiState.currentResult?.let { nounRes ->
-                                    DeclensionResultView(
-                                        result = nounRes,
-                                        selectedTab = uiState.selectedNumberTab,
-                                        onTabSelected = { viewModel.onSelectTab(it) },
-                                        onSpeak = { viewModel.speakGerman(it) },
-                                        onExport = { viewModel.onOpenExportDialog() },
-                                        ttsSpeed = ttsSpeed,
-                                        onTtsSpeedChange = { viewModel.setTtsSpeed(it) }
-                                    )
+                                    val isSentence = nounRes.gender.equals("Satz", ignoreCase = true) ||
+                                        nounRes.gender == "–" ||
+                                        nounRes.word.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.size >= 2
+                                    if (isSentence) {
+                                        SentenceResultView(
+                                            result = nounRes,
+                                            onSpeak = { viewModel.speakGerman(it) }
+                                        )
+                                    } else {
+                                        DeclensionResultView(
+                                            result = nounRes,
+                                            selectedTab = uiState.selectedNumberTab,
+                                            onTabSelected = { viewModel.onSelectTab(it) },
+                                            onSpeak = { viewModel.speakGerman(it) },
+                                            onExport = { viewModel.onOpenExportDialog() },
+                                            ttsSpeed = ttsSpeed,
+                                            onTtsSpeedChange = { viewModel.setTtsSpeed(it) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -867,6 +929,7 @@ fun MainScreen(
         val initialScope = when (uiState.selectedGrammarType) {
             GrammarType.NOMEN -> com.example.util.DeclensionHistoryExportHelper.ExportScope.NOMEN
             GrammarType.VERB -> com.example.util.DeclensionHistoryExportHelper.ExportScope.VERB
+            GrammarType.SENTENCE -> com.example.util.DeclensionHistoryExportHelper.ExportScope.NOMEN
         }
         PrintExportDialog(
             currentGrammarResult = uiState.currentGrammarResult,

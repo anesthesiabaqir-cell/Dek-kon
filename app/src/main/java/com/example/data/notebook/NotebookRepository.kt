@@ -109,7 +109,7 @@ class NotebookRepository(private val context: Context) {
             // Initialize default settings.json
             val defaultSettings = NotebookSettings(
                 notebookName = DEFAULT_NOTEBOOK_ID,
-                themeColorId = "Schiefer",
+                themeColorId = "Dunkelblau",
                 themeMode = "auto"
             )
             val settingsFile = File(defaultFolder, SETTINGS_FILE_NAME)

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Declension &amp; Conjugation</string>
+    <string name="app_name">Deklination &amp; Konjugation</string>
     <string name="export_dialog_title">Export &amp; Search History</string>
     <string name="export_dialog_subtitle">Download &amp; share PDF &amp; Excel (.xlsx)</string>
     <string name="export_section_share">Share directly via other apps:</string>

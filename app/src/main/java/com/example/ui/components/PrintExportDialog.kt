@@ -368,7 +368,7 @@ fun PrintExportDialog(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         listOf(
-                            DeclensionHistoryExportHelper.ExportScope.NOMEN to "Nomen",
+                            DeclensionHistoryExportHelper.ExportScope.NOMEN to "Nomen & Sätze",
                             DeclensionHistoryExportHelper.ExportScope.VERB to "Verb",
                             DeclensionHistoryExportHelper.ExportScope.ALLE to "Alle"
                         ).forEach { (scopeItem, label) ->

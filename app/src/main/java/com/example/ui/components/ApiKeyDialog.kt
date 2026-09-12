@@ -963,6 +963,88 @@ fun ApiKeyDialog(
                                 color = GeoOnSurface
                             )
 
+                            // 0. Material 3 Haupt-Farben (6 Separate Themes)
+                            Text(
+                                text = strings.themeMainColors,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = GeoPrimary
+                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                AppThemePackage.M3_THEMES.chunked(3).forEach { rowThemes ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        for (i in 0 until 3) {
+                                            if (i < rowThemes.size) {
+                                                val theme = rowThemes[i]
+                                                val isSelected = theme == selectedTheme
+                                                ThemeColorItem(
+                                                    theme = theme,
+                                                    isSelected = isSelected,
+                                                    onSelect = { onSelectTheme(theme) },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            } else {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider(
+                                color = GeoBorder.copy(alpha = 0.6f),
+                                thickness = 1.dp,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+
+                            // 0B. 10 Neue Kräftige & Expressive Farben (Nicht Material 3)
+                            Text(
+                                text = strings.themeBoldColors,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = GeoPrimary
+                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                AppThemePackage.BOLD_EXPRESSIVE_THEMES.chunked(3).forEach { rowThemes ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        for (i in 0 until 3) {
+                                            if (i < rowThemes.size) {
+                                                val theme = rowThemes[i]
+                                                val isSelected = theme == selectedTheme
+                                                ThemeColorItem(
+                                                    theme = theme,
+                                                    isSelected = isSelected,
+                                                    onSelect = { onSelectTheme(theme) },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            } else {
+                                                Spacer(modifier = Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider(
+                                color = GeoBorder.copy(alpha = 0.6f),
+                                thickness = 1.dp,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+
                             // 1. Rotbraun & Terracotta (Warm Earth)
                             Text(
                                 text = strings.themeWarmEarth,
@@ -1397,10 +1479,15 @@ private fun ThemeColorItem(
             contentAlignment = Alignment.Center
         ) {
             if (isSelected) {
+                val iconTint = if (theme == AppThemePackage.WEISS || theme == AppThemePackage.HELLGRAU || theme == AppThemePackage.GELB || theme == AppThemePackage.CREME || theme == AppThemePackage.NEON_GELB || theme == AppThemePackage.GIFTGRUEN) {
+                    Color(0xFF1E1A16)
+                } else {
+                    Color.White
+                }
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = iconTint,
                     modifier = Modifier.size(14.dp)
                 )
             }

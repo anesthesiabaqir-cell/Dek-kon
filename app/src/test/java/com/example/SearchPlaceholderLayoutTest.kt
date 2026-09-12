@@ -32,9 +32,9 @@ class SearchPlaceholderLayoutTest {
         val placeholder = if (viewModel.uiState.value.selectedGrammarType == GrammarType.VERB) {
             "Suche nach Verben"
         } else {
-            "Suche nach Nomen"
+            "Suche nach Nomen & Sätze"
         }
-        assertEquals("Suche nach Nomen", placeholder)
+        assertEquals("Suche nach Nomen & Sätze", placeholder)
         assertNotEquals("Nomen suchen", placeholder)
         assertNotEquals("Nomen suche", placeholder)
     }
@@ -46,7 +46,7 @@ class SearchPlaceholderLayoutTest {
         val placeholder = if (viewModel.uiState.value.selectedGrammarType == GrammarType.VERB) {
             "Suche nach Verben"
         } else {
-            "Suche nach Nomen"
+            "Suche nach Nomen & Sätze"
         }
         assertEquals("Suche nach Verben", placeholder)
         assertNotEquals("Verb suchen", placeholder)
@@ -56,7 +56,7 @@ class SearchPlaceholderLayoutTest {
     fun `test string resources match exact specification`() {
         val nounPlaceholder = application.getString(R.string.search_placeholder_noun)
         val verbPlaceholder = application.getString(R.string.search_placeholder_verb)
-        assertEquals("Suche nach Nomen", nounPlaceholder)
+        assertEquals("Suche nach Nomen & Sätze", nounPlaceholder)
         assertEquals("Suche nach Verben", verbPlaceholder)
     }
 

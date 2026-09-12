@@ -95,7 +95,56 @@ val GeoOutline: Color
 val GeoHeaderKasus: Color
     @Composable
     @ReadOnlyComposable
-    get() = MaterialTheme.colorScheme.surfaceVariant
+    get() {
+        val theme = LocalAppThemePackage.current
+        val isDark = LocalIsDarkTheme.current
+        return if (theme.isBoldTheme) {
+            Color(if (isDark) theme.headerKasusDarkHex else theme.headerKasusLightHex)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+    }
+
+val GeoIsBoldTheme: Boolean
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalAppThemePackage.current.isBoldTheme
+
+val GeoGlowColor: Color
+    @Composable
+    @ReadOnlyComposable
+    get() {
+        val theme = LocalAppThemePackage.current
+        val isDark = LocalIsDarkTheme.current
+        return Color(if (isDark) theme.glowColorDarkHex else theme.glowColorLightHex)
+    }
+
+val GeoCardRibbonColor: Color
+    @Composable
+    @ReadOnlyComposable
+    get() {
+        val theme = LocalAppThemePackage.current
+        val isDark = LocalIsDarkTheme.current
+        return Color(if (isDark) theme.cardAccentRibbonDarkHex else theme.cardAccentRibbonLightHex)
+    }
+
+val GeoBannerGradient: List<Color>
+    @Composable
+    @ReadOnlyComposable
+    get() {
+        val theme = LocalAppThemePackage.current
+        val isDark = LocalIsDarkTheme.current
+        return if (isDark) {
+            listOf(Color(theme.bannerGradientStartDarkHex), Color(theme.bannerGradientEndDarkHex))
+        } else {
+            listOf(Color(theme.bannerGradientStartLightHex), Color(theme.bannerGradientEndLightHex))
+        }
+    }
+
+val GeoAccentColor: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalAppThemePackage.current.accent
 
 val GeoError: Color
     @Composable

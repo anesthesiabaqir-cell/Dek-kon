@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">تصريف وتصريف الأفعال</string>
+    <string name="app_name">Deklination &amp; Konjugation</string>
     <string name="export_dialog_title">تصدير وسجل البحث</string>
     <string name="export_dialog_subtitle">تنزيل ومشاركة PDF و Excel (.xlsx)</string>
     <string name="export_section_share">مشاركة مباشرة عبر تطبيقات أخرى:</string>

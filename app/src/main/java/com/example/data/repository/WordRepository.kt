@@ -159,6 +159,7 @@ class WordRepository(
         val grammarResult = searchGrammar(word, com.example.data.model.GrammarType.NOMEN)
         return when (grammarResult) {
             is com.example.data.model.GrammarResult.Noun -> grammarResult.declension
+            is com.example.data.model.GrammarResult.Sentence -> grammarResult.declension
             is com.example.data.model.GrammarResult.Verb -> throw IllegalStateException("Erwartetes Nomen, aber Verb erhalten.")
         }
     }
@@ -168,6 +169,7 @@ class WordRepository(
         return when (grammarResult) {
             is com.example.data.model.GrammarResult.Verb -> grammarResult.conjugation
             is com.example.data.model.GrammarResult.Noun -> throw IllegalStateException("Erwartetes Verb, aber Nomen erhalten.")
+            is com.example.data.model.GrammarResult.Sentence -> throw IllegalStateException("Erwartetes Verb, aber Satz erhalten.")
         }
     }
 
@@ -212,6 +214,19 @@ class WordRepository(
                     genderArticle = conjugation.partizip2,   // Store partizip2 as genderArticle auxiliary
                     meaningEnglish = conjugation.meaningEnglish,
                     rawJsonResult = conjugation.rawJson,
+                    timestamp = System.currentTimeMillis()
+                )
+            }
+            is com.example.data.model.GrammarResult.Sentence -> {
+                val declension = result.declension
+                WordHistoryEntity(
+                    word = declension.word,
+                    type = com.example.data.model.GrammarType.SENTENCE.displayName,
+                    data = declension.rawJson,
+                    gender = "–",
+                    genderArticle = "",
+                    meaningEnglish = declension.meaningEnglish,
+                    rawJsonResult = declension.rawJson,
                     timestamp = System.currentTimeMillis()
                 )
             }
@@ -283,6 +298,7 @@ class WordRepository(
         val result = getGrammarFromHistory(entity)
         return when (result) {
             is com.example.data.model.GrammarResult.Noun -> result.declension
+            is com.example.data.model.GrammarResult.Sentence -> result.declension
             is com.example.data.model.GrammarResult.Verb -> throw IllegalStateException("Eintrag ist ein Verb")
         }
     }

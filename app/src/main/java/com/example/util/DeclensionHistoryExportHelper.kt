@@ -46,7 +46,7 @@ object DeclensionHistoryExportHelper {
     const val COLOR_HEX_NEUTRUM = "#15803D"
 
     val HEADERS = listOf(
-        "Nomen (Singular)",
+        "Nomen und Sätze",
         "Genus",
         "English translation",
         "Nominativ (Sg./Pl.)",
@@ -266,7 +266,7 @@ object DeclensionHistoryExportHelper {
     }
 
     enum class ExportScope(val displayName: String) {
-        NOMEN("Nomen"),
+        NOMEN("Nomen & Sätze"),
         VERB("Verb"),
         ALLE("Alle");
 
@@ -488,11 +488,21 @@ object DeclensionHistoryExportHelper {
                 continue // Skip duplicates to ensure each searched word appears exactly once
             }
 
-            // Nomen (Singular) with article, e.g. "das Schloss", "der Aufzug"
-            val nomenSingular = "${w.genderArticle} ${w.word}".trim()
+            val isSentence = w.gender.equals("Satz", ignoreCase = true) ||
+                    w.gender == "–" ||
+                    w.word.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.size >= 2
 
-            // Plural full form, e.g. "die Schlösser", "die Aufzüge"
-            val pluralForm = if (w.pluralNoun.isNotBlank()) {
+            // Nomen und Sätze (Singular or full sentence)
+            val nomenSingular = if (isSentence) {
+                w.word.trim()
+            } else {
+                "${w.genderArticle} ${w.word}".trim()
+            }
+
+            // Plural full form
+            val pluralForm = if (isSentence) {
+                "–"
+            } else if (w.pluralNoun.isNotBlank()) {
                 w.pluralNoun
             } else {
                 val nomPlural = w.plural.rows.firstOrNull { it.caseKey == "nominativ" }?.definite
@@ -504,6 +514,7 @@ object DeclensionHistoryExportHelper {
 
             // Helper to format: "Singular / Plural" (using definite forms or explicit values)
             fun formatCase(caseKey: String): String {
+                if (isSentence) return "–"
                 val singRow = w.singular.rows.firstOrNull { it.caseKey == caseKey }
                 val plurRow = w.plural.rows.firstOrNull { it.caseKey == caseKey }
 
@@ -524,15 +535,19 @@ object DeclensionHistoryExportHelper {
             val dativ = formatCase("dativ")
 
             // Normalized German Genus (Maskulin, Feminin, Neutrum)
-            val genus = when (w.gender.trim().lowercase(java.util.Locale.GERMAN)) {
-                "maskulin", "m", "masculine", "der" -> "Maskulin"
-                "feminin", "f", "feminine", "die" -> "Feminin"
-                "neutrum", "n", "neuter", "das" -> "Neutrum"
-                else -> when (w.genderArticle.trim().lowercase(java.util.Locale.GERMAN)) {
-                    "der" -> "Maskulin"
-                    "die" -> "Feminin"
-                    "das" -> "Neutrum"
-                    else -> w.gender.trim().ifBlank { "-" }
+            val genus = if (isSentence) {
+                "–"
+            } else {
+                when (w.gender.trim().lowercase(java.util.Locale.GERMAN)) {
+                    "maskulin", "m", "masculine", "der" -> "Maskulin"
+                    "feminin", "f", "feminine", "die" -> "Feminin"
+                    "neutrum", "n", "neuter", "das" -> "Neutrum"
+                    else -> when (w.genderArticle.trim().lowercase(java.util.Locale.GERMAN)) {
+                        "der" -> "Maskulin"
+                        "die" -> "Feminin"
+                        "das" -> "Neutrum"
+                        else -> w.gender.trim().ifBlank { "-" }
+                    }
                 }
             }
 
@@ -810,7 +825,7 @@ object DeclensionHistoryExportHelper {
   <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>""")
 
-            val sheet1Name = safeSheetName("${cleanTitle}_Nomen", "Nomen")
+            val sheet1Name = safeSheetName("${cleanTitle}_Nomen", "Nomen & Sätze")
             val sheet2Name = safeSheetName("${cleanTitle}_Verben", "Verben")
 
             addZipEntry(zos, "xl/workbook.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1866,8 +1881,8 @@ object DeclensionHistoryExportHelper {
 
                 var currentY = margin + 12f
                 val nounSectionTitle = when {
-                    scope == ExportScope.ALLE && nounPageCount == 0 -> "$cleanTitle — Nomen"
-                    scope == ExportScope.ALLE -> "$cleanTitle — Nomen (Fortsetzung)"
+                    scope == ExportScope.ALLE && nounPageCount == 0 -> "$cleanTitle — Nomen und Sätze"
+                    scope == ExportScope.ALLE -> "$cleanTitle — Nomen und Sätze (Fortsetzung)"
                     nounPageCount == 0 -> cleanTitle
                     else -> "$cleanTitle (Fortsetzung)"
                 }
@@ -1929,7 +1944,7 @@ object DeclensionHistoryExportHelper {
                     }
                 }
 
-                val footerText = if (scope == ExportScope.ALLE) "Seite $pageNumber — Nomen" else "Seite $pageNumber"
+                val footerText = if (scope == ExportScope.ALLE) "Seite $pageNumber — Nomen und Sätze" else "Seite $pageNumber"
                 canvas.drawText(footerText, pageWidth - margin - subtitlePaint.measureText(footerText), pageHeight - 10f, subtitlePaint)
 
                 doc.finishPage(page)
@@ -2183,7 +2198,7 @@ object DeclensionHistoryExportHelper {
     <table>
         <thead>
             <tr>
-                <th>Nomen (Singular)</th>
+                <th>Nomen und Sätze</th>
                 <th>Genus</th>
                 <th>English translation</th>
                 <th>Nominativ (Sg./Pl.)</th>
@@ -2369,12 +2384,12 @@ object DeclensionHistoryExportHelper {
 
         if (scope == ExportScope.ALLE || scope == ExportScope.NOMEN) {
             val nounRows = buildDeduplicatedRows(nouns)
-            if (scope == ExportScope.ALLE) sb.append("<h2>Nomen</h2>")
+            if (scope == ExportScope.ALLE) sb.append("<h2>Nomen und Sätze</h2>")
             sb.append("""
     <table>
         <thead>
             <tr>
-                <th>Nomen (Singular)</th>
+                <th>Nomen und Sätze</th>
                 <th>Genus</th>
                 <th>English translation</th>
                 <th>Nominativ (Sg./Pl.)</th>

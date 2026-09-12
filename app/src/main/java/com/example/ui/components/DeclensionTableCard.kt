@@ -56,8 +56,12 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.DeclensionCaseRow
 import com.example.data.model.DeclensionTableGroup
 import com.example.data.model.WordDeclensionResult
+import androidx.compose.ui.graphics.Brush
+import com.example.ui.theme.GeoBannerGradient
 import com.example.ui.theme.GeoBorder
+import com.example.ui.theme.GeoCardRibbonColor
 import com.example.ui.theme.GeoHeaderKasus
+import com.example.ui.theme.GeoIsBoldTheme
 import com.example.ui.theme.GeoOnPrimaryContainer
 import com.example.ui.theme.GeoOnSecondaryContainer
 import com.example.ui.theme.GeoOnSurface
@@ -70,6 +74,138 @@ import com.example.ui.theme.GeoSurface
 import com.example.ui.theme.GeoSurfaceVariant
 
 @Composable
+fun SentenceResultView(
+    result: WordDeclensionResult,
+    onSpeak: (String) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("sentence_result_card"),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            if (GeoIsBoldTheme) 1.5.dp else 1.dp,
+            if (GeoIsBoldTheme) GeoCardRibbonColor.copy(alpha = 0.55f) else GeoBorder
+        ),
+        colors = CardDefaults.cardColors(containerColor = GeoSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
+    ) {
+        if (GeoIsBoldTheme) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.5.dp)
+                    .background(Brush.horizontalGradient(GeoBannerGradient))
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp)
+        ) {
+            // Top Row: German sentence (with text wrapping) + Speaker Icon (12dp gap)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = result.word,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GeoOnSurface,
+                        lineHeight = 26.sp
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("sentence_text"),
+                    softWrap = true
+                )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFEEEEEE))
+                        .clickable { onSpeak(result.word) }
+                        .testTag("pronounce_sentence_button"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                        contentDescription = "Satz anhören",
+                        tint = Color(0xFF757575),
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+            }
+
+            // Second Row: English translation directly below the sentence
+            if (result.meaningEnglish.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                val translationText = remember(result.meaningEnglish) {
+                    val raw = result.meaningEnglish.trim()
+                    if (raw.startsWith("English:", ignoreCase = true)) {
+                        raw
+                    } else if (raw.startsWith("Eng.:", ignoreCase = true)) {
+                        "English: ${raw.substringAfter("Eng.:").trim()}"
+                    } else if (raw.startsWith("Eng:", ignoreCase = true)) {
+                        "English: ${raw.substringAfter("Eng:").trim()}"
+                    } else {
+                        "English: $raw"
+                    }
+                }
+                Text(
+                    text = translationText,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 14.5.sp,
+                        color = GeoOnSurfaceVariant,
+                        lineHeight = 21.sp
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("sentence_translation"),
+                    softWrap = true
+                )
+            }
+
+            // Third Row: Satz badge inside a distinct colored container at the bottom-right
+            Spacer(modifier = Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFE0F2F1))
+                        .border(1.dp, Color(0xFF00897B).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                        .testTag("sentence_type_badge")
+                ) {
+                    Text(
+                        text = "Satz",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            letterSpacing = 0.5.sp
+                        ),
+                        color = Color(0xFF00695C),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun DeclensionResultView(
     result: WordDeclensionResult,
     selectedTab: Int,
@@ -80,6 +216,21 @@ fun DeclensionResultView(
     onTtsSpeedChange: (Float) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val isSentence = remember(result.gender, result.word) {
+        result.gender.equals("Satz", ignoreCase = true) ||
+        result.gender == "–" ||
+        result.word.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.size >= 2
+    }
+
+    if (isSentence) {
+        SentenceResultView(
+            result = result,
+            onSpeak = onSpeak,
+            modifier = modifier
+        )
+        return
+    }
+
     val genusDisplay = when (result.gender.lowercase()) {
         "maskulin", "masculine", "der", "mas" -> "Maskulin"
         "feminin", "feminine", "die", "fem" -> "Feminin"
@@ -136,10 +287,21 @@ fun DeclensionResultView(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, GeoBorder),
+            border = BorderStroke(
+                if (GeoIsBoldTheme) 1.5.dp else 1.dp,
+                if (GeoIsBoldTheme) GeoCardRibbonColor.copy(alpha = 0.55f) else GeoBorder
+            ),
             colors = CardDefaults.cardColors(containerColor = GeoSurface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
         ) {
+            if (GeoIsBoldTheme) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.5.dp)
+                        .background(Brush.horizontalGradient(GeoBannerGradient))
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -184,7 +346,7 @@ fun DeclensionResultView(
                     }
                 }
 
-                // Row 2: Grammatical Details - Genus & Plural (14sp, On Surface, left-aligned)
+                // Row 2: Grammatical Details - Genus & Plural
                 if (detailsText.isNotBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
@@ -201,7 +363,7 @@ fun DeclensionResultView(
                             modifier = Modifier.weight(1f, fill = false)
                         )
 
-                        if (result.pluralNoun.isNotBlank()) {
+                        if (result.pluralNoun.isNotBlank() && result.pluralNoun != "–") {
                             Spacer(modifier = Modifier.width(6.dp))
                             Box(
                                 modifier = Modifier
@@ -366,16 +528,22 @@ fun DeclensionTableCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, GeoBorder),
+        border = BorderStroke(
+            if (GeoIsBoldTheme) 1.5.dp else 1.dp,
+            if (GeoIsBoldTheme) GeoCardRibbonColor.copy(alpha = 0.55f) else GeoBorder
+        ),
         colors = CardDefaults.cardColors(containerColor = GeoSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Section Header Banner: uppercase, tracking-wider, e.g. "SINGULAR" or "PLURAL"
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(headerBg)
+                    .then(
+                        if (GeoIsBoldTheme) Modifier.background(Brush.horizontalGradient(GeoBannerGradient))
+                        else Modifier.background(headerBg)
+                    )
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 Text(
@@ -383,7 +551,7 @@ fun DeclensionTableCard(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.2.sp,
-                    color = headerTextColor,
+                    color = if (GeoIsBoldTheme) Color.White else headerTextColor,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -593,7 +761,7 @@ private fun DeclensionCell(
     isBold: Boolean = false,
     textColor: Color = GeoOnSurface
 ) {
-    val hasContent = text.isNotBlank() && text != "-"
+    val hasContent = text.isNotBlank() && text != "-" && text != "–" && text != "—"
 
     Box(
         modifier = Modifier

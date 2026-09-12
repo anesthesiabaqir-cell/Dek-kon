@@ -17,7 +17,7 @@
     <string name="settings_quota_notice">Tägliches Limit: 50 Anfragen</string>
 
     <!-- Search Placeholders -->
-    <string name="search_placeholder_noun">Suche nach Nomen</string>
+    <string name="search_placeholder_noun">Suche nach Nomen &amp; Sätze</string>
     <string name="search_placeholder_verb">Suche nach Verben</string>
 
     <!-- History Section -->

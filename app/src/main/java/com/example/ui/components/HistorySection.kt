@@ -76,9 +76,14 @@ import com.example.data.local.WordHistoryEntity
 import com.example.data.model.extractNounQuickDetails
 import com.example.data.model.extractVerbQuickDetails
 import org.json.JSONObject
+import androidx.compose.ui.graphics.Brush
+import com.example.ui.theme.GeoBannerGradient
 import com.example.ui.theme.GeoBorder
+import com.example.ui.theme.GeoCardRibbonColor
 import com.example.ui.theme.GeoFemininBg
 import com.example.ui.theme.GeoFemininText
+import com.example.ui.theme.GeoGlowColor
+import com.example.ui.theme.GeoIsBoldTheme
 import com.example.ui.theme.GeoMaskulinBg
 import com.example.ui.theme.GeoMaskulinText
 import com.example.ui.theme.GeoNeutrumBg
@@ -141,6 +146,7 @@ internal fun getBadgeInfo(isVerb: Boolean, gender: String): HistoryBadgeInfo {
 
     return remember(gender) {
         when (gender.lowercase(Locale.ROOT)) {
+            "satz", "sentence", "–", "-" -> HistoryBadgeInfo(Color(0xFFE0F2F1), Color(0xFF00695C), "Satz")
             "maskulin", "masculine", "der" -> HistoryBadgeInfo(GeoMaskulinBg, GeoMaskulinText, "MASKULIN")
             "feminin", "feminine", "die" -> HistoryBadgeInfo(GeoFemininBg, GeoFemininText, "FEMININ")
             "neutrum", "neuter", "das" -> HistoryBadgeInfo(GeoNeutrumBg, GeoNeutrumText, "NEUTRUM")
@@ -239,7 +245,11 @@ fun HistorySearchBar(
                 .height(48.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(GeoSurfaceVariant)
-                .border(1.dp, GeoBorder, RoundedCornerShape(10.dp))
+                .border(
+                    1.dp,
+                    if (GeoIsBoldTheme) GeoGlowColor.copy(alpha = 0.5f) else GeoBorder,
+                    RoundedCornerShape(10.dp)
+                )
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -311,7 +321,7 @@ fun HistoryFilterPills(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        listOf("Alle", "Nomen", "Verben").forEachIndexed { index, title ->
+        listOf("Alle", "Nomen & Sätze", "Verben").forEachIndexed { index, title ->
             val isSelected = selectedFilterIndex == index
             Box(
                 modifier = Modifier
@@ -649,6 +659,13 @@ fun HistoryItemCard(
     modifier: Modifier = Modifier
 ) {
     val isVerb = remember(item.type) { item.type.equals("Verb", ignoreCase = true) }
+    val isSentence = remember(item.type, item.gender, item.word) {
+        item.type.equals("Satz", ignoreCase = true) ||
+        item.type.equals("Sentence", ignoreCase = true) ||
+        item.gender.equals("Satz", ignoreCase = true) ||
+        item.gender == "–" ||
+        item.word.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.size >= 2
+    }
     val badge = getBadgeInfo(isVerb, item.gender)
     val formattedDate = remember(item.timestamp) { HistoryFormatterCache.formatDate(item.timestamp) }
 
@@ -656,23 +673,228 @@ fun HistoryItemCard(
         if (isVerb) extractVerbQuickDetails(item) else null
     }
 
-    val nounDetails = remember(item, isVerb) {
-        if (!isVerb) extractNounQuickDetails(item) else null
+    val nounDetails = remember(item, isVerb, isSentence) {
+        if (!isVerb && !isSentence) extractNounQuickDetails(item) else null
     }
 
-    val pluralText = remember(item.rawJsonResult, isVerb) {
-        if (isVerb) "" else extractPluralForm(item.rawJsonResult)
+    val pluralText = remember(item.rawJsonResult, isVerb, isSentence) {
+        if (isVerb || isSentence) "" else extractPluralForm(item.rawJsonResult)
     }
 
-    val singularDisplay = remember(isVerb, item.genderArticle, item.word) {
-        if (!isVerb && item.genderArticle.isNotBlank()) {
+    val singularDisplay = remember(isVerb, isSentence, item.genderArticle, item.word) {
+        if (!isVerb && !isSentence && item.genderArticle.isNotBlank()) {
             "${item.genderArticle} ${item.word}"
         } else {
             item.word
         }
     }
 
-    if (isVerb) {
+    if (isSentence) {
+        val sentenceScrollState = rememberScrollState()
+        val translationScrollState = rememberScrollState()
+        val shortDate = remember(item.timestamp) {
+            HistoryFormatterCache.formatShortDate(item.timestamp)
+        }
+        val contentTextColor = GeoOnSurface
+
+        val translationText = remember(item.meaningEnglish, item.rawJsonResult) {
+            var raw = item.meaningEnglish.trim()
+            if (raw.isBlank() && item.rawJsonResult.isNotBlank()) {
+                try {
+                    val obj = JSONObject(item.rawJsonResult)
+                    raw = obj.optString("meaningEnglish", obj.optString("meaning", "")).trim()
+                } catch (_: Exception) {}
+            }
+            val clean = if (raw.startsWith("Eng.:", ignoreCase = true)) {
+                raw.substringAfter("Eng.:").trim()
+            } else if (raw.startsWith("Eng:", ignoreCase = true)) {
+                raw.substringAfter("Eng:").trim()
+            } else {
+                raw
+            }
+            clean.replace(Regex("[\\u0600-\\u06FF]"), "").replace(Regex("\\s+"), " ").trim()
+        }
+
+        val translationAnnotated = remember(translationText, contentTextColor) {
+            val normalColor = contentTextColor
+            val greenColor = Color(0xFF2E7D32)
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = greenColor, fontWeight = FontWeight.Bold)) {
+                    append("Eng.:")
+                }
+                withStyle(SpanStyle(color = normalColor, fontWeight = FontWeight.Normal)) {
+                    append(if (translationText.isNotBlank()) " $translationText" else " —")
+                }
+            }
+        }
+
+        Card(
+            modifier = modifier
+                .fillMaxWidth()
+                .graphicsLayer { clip = false }
+                .clickable(onClick = onClick)
+                .testTag("history_item_${item.id}"),
+            shape = RoundedCornerShape(12.dp),
+            border = if (GeoIsBoldTheme) {
+                BorderStroke(1.5.dp, GeoCardRibbonColor.copy(alpha = 0.55f))
+            } else {
+                BorderStroke(1.dp, GeoBorder.copy(alpha = 0.6f))
+            },
+            colors = CardDefaults.cardColors(containerColor = GeoSurfaceVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
+        ) {
+            if (GeoIsBoldTheme) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.5.dp)
+                        .background(Brush.horizontalGradient(GeoBannerGradient))
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp)
+            ) {
+                // Header: Original sentence with horizontal scrolling and action icons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(32.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(sentenceScrollState),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(
+                            text = item.word,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (GeoIsBoldTheme) GeoPrimary else if (LocalIsDarkTheme.current) MaterialTheme.colorScheme.primary else Color(0xFF1E3A8A)
+                            ),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(
+                            onClick = { onSpeak(item.word) },
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("pronounce_history_${item.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = "Satz anhören",
+                                tint = GeoOnSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("delete_history_item_${item.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "Eintrag löschen",
+                                tint = GeoOnSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Divider
+                Spacer(modifier = Modifier.height(2.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(if (GeoIsBoldTheme) GeoGlowColor.copy(alpha = 0.35f) else GeoBorder.copy(alpha = 0.5f))
+                )
+
+                // Row 2: English Translation - horizontally scrollable, strictly no wrapping
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                        .horizontalScroll(translationScrollState),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = translationAnnotated,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+
+                // Divider
+                Spacer(modifier = Modifier.height(2.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(if (GeoIsBoldTheme) GeoGlowColor.copy(alpha = 0.35f) else GeoBorder.copy(alpha = 0.5f))
+                )
+
+                // Row 3: Metadata - Date with 📅 and "Satz" badge in teal container
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(28.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "📅 $shortDate",
+                        style = TextStyle(
+                            fontSize = 12.sp,
+                            color = GeoOnSurfaceVariant
+                        ),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (LocalIsDarkTheme.current) Color(0xFF004D40) else Color(0xFFE0F2F1))
+                            .border(1.dp, Color(0xFF00897B).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Satz",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                letterSpacing = 0.4.sp
+                            ),
+                            color = if (LocalIsDarkTheme.current) Color(0xFF80CBC4) else Color(0xFF00695C),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+        }
+    } else if (isVerb) {
         // 🎯 Unified Card Design for Verbs (Dynamic Theming)
         // Fixed/flexible min 160dp height, unified dynamic GeoSurfaceVariant container, 12dp start/end padding, 8dp top padding, 14dp bottom padding
         // 4 clearly separated rows with 1dp dynamic dividers (GeoBorder)
@@ -684,10 +906,22 @@ fun HistoryItemCard(
                 .clickable(onClick = onClick)
                 .testTag("history_item_${item.id}"),
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, GeoBorder.copy(alpha = 0.6f)),
+            border = if (GeoIsBoldTheme) {
+                BorderStroke(1.5.dp, GeoCardRibbonColor.copy(alpha = 0.55f))
+            } else {
+                BorderStroke(1.dp, GeoBorder.copy(alpha = 0.6f))
+            },
             colors = CardDefaults.cardColors(containerColor = GeoSurfaceVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
         ) {
+            if (GeoIsBoldTheme) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.5.dp)
+                        .background(Brush.horizontalGradient(GeoBannerGradient))
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -702,7 +936,9 @@ fun HistoryItemCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .horizontalScroll(rememberScrollState()),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Text(
@@ -710,7 +946,7 @@ fun HistoryItemCard(
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (LocalIsDarkTheme.current) MaterialTheme.colorScheme.primary else Color(0xFF1E3A8A)
+                                color = if (GeoIsBoldTheme) GeoPrimary else if (LocalIsDarkTheme.current) MaterialTheme.colorScheme.primary else Color(0xFF1E3A8A)
                             ),
                             maxLines = 1,
                             softWrap = false
@@ -758,7 +994,7 @@ fun HistoryItemCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(GeoBorder.copy(alpha = 0.5f))
+                        .background(if (GeoIsBoldTheme) GeoGlowColor.copy(alpha = 0.35f) else GeoBorder.copy(alpha = 0.5f))
                 )
 
                 // Element 2: Conjugations row (German) - 40dp height, scrollable horizontally
@@ -923,7 +1159,7 @@ fun HistoryItemCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(GeoBorder.copy(alpha = 0.5f))
+                        .background(if (GeoIsBoldTheme) GeoGlowColor.copy(alpha = 0.35f) else GeoBorder.copy(alpha = 0.5f))
                 )
 
                 // Element 4: Metadata row - 28dp height
@@ -1060,10 +1296,22 @@ fun HistoryItemCard(
                 .clickable(onClick = onClick)
                 .testTag("history_item_${item.id}"),
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, GeoBorder.copy(alpha = 0.6f)),
+            border = if (GeoIsBoldTheme) {
+                BorderStroke(1.5.dp, GeoCardRibbonColor.copy(alpha = 0.55f))
+            } else {
+                BorderStroke(1.dp, GeoBorder.copy(alpha = 0.6f))
+            },
             colors = CardDefaults.cardColors(containerColor = GeoSurfaceVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
         ) {
+            if (GeoIsBoldTheme) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.5.dp)
+                        .background(Brush.horizontalGradient(GeoBannerGradient))
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1080,7 +1328,9 @@ fun HistoryItemCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .horizontalScroll(rememberScrollState()),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Text(
@@ -1088,7 +1338,7 @@ fun HistoryItemCard(
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (LocalIsDarkTheme.current) MaterialTheme.colorScheme.primary else Color(0xFF1E3A8A)
+                                color = if (GeoIsBoldTheme) GeoPrimary else if (LocalIsDarkTheme.current) MaterialTheme.colorScheme.primary else Color(0xFF1E3A8A)
                             ),
                             maxLines = 1,
                             softWrap = false
@@ -1227,7 +1477,7 @@ fun HistoryItemCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(GeoBorder.copy(alpha = 0.5f))
+                        .background(if (GeoIsBoldTheme) GeoGlowColor.copy(alpha = 0.35f) else GeoBorder.copy(alpha = 0.5f))
                 )
 
                 // Element 3: Translation row (English) - 40dp height, scrollable horizontally
@@ -1285,7 +1535,7 @@ fun HistoryItemCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(GeoBorder.copy(alpha = 0.5f))
+                        .background(if (GeoIsBoldTheme) GeoGlowColor.copy(alpha = 0.35f) else GeoBorder.copy(alpha = 0.5f))
                 )
 
                 // Element 4: Metadata row - 28dp height

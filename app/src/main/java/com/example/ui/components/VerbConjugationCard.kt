@@ -55,8 +55,12 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.VerbConjugationResult
 import com.example.data.model.VerbImperativ
 import com.example.data.model.VerbTenseConjugation
+import androidx.compose.ui.graphics.Brush
+import com.example.ui.theme.GeoBannerGradient
 import com.example.ui.theme.GeoBorder
+import com.example.ui.theme.GeoCardRibbonColor
 import com.example.ui.theme.GeoHeaderKasus
+import com.example.ui.theme.GeoIsBoldTheme
 import com.example.ui.theme.GeoOnPrimaryContainer
 import com.example.ui.theme.GeoOnSecondaryContainer
 import com.example.ui.theme.GeoOnSurface
@@ -97,10 +101,21 @@ fun VerbConjugationResultView(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, GeoBorder),
+            border = BorderStroke(
+                if (GeoIsBoldTheme) 1.5.dp else 1.dp,
+                if (GeoIsBoldTheme) GeoCardRibbonColor.copy(alpha = 0.55f) else GeoBorder
+            ),
             colors = CardDefaults.cardColors(containerColor = GeoSurface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
         ) {
+            if (GeoIsBoldTheme) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.5.dp)
+                        .background(Brush.horizontalGradient(GeoBannerGradient))
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -400,16 +415,22 @@ fun TenseConjugationCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, GeoBorder),
+        border = BorderStroke(
+            if (GeoIsBoldTheme) 1.5.dp else 1.dp,
+            if (GeoIsBoldTheme) GeoCardRibbonColor.copy(alpha = 0.55f) else GeoBorder
+        ),
         colors = CardDefaults.cardColors(containerColor = GeoSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Tense Banner Header
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(GeoPrimaryContainer)
+                    .then(
+                        if (GeoIsBoldTheme) Modifier.background(Brush.horizontalGradient(GeoBannerGradient))
+                        else Modifier.background(GeoPrimaryContainer)
+                    )
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 Text(
@@ -417,7 +438,7 @@ fun TenseConjugationCard(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.1.sp,
-                    color = GeoOnPrimaryContainer,
+                    color = if (GeoIsBoldTheme) Color.White else GeoOnPrimaryContainer,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -579,15 +600,21 @@ fun ImperativConjugationCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, GeoBorder),
+        border = BorderStroke(
+            if (GeoIsBoldTheme) 1.5.dp else 1.dp,
+            if (GeoIsBoldTheme) GeoCardRibbonColor.copy(alpha = 0.55f) else GeoBorder
+        ),
         colors = CardDefaults.cardColors(containerColor = GeoSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (GeoIsBoldTheme) 2.dp else 0.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(GeoSecondaryContainer)
+                    .then(
+                        if (GeoIsBoldTheme) Modifier.background(Brush.horizontalGradient(GeoBannerGradient))
+                        else Modifier.background(GeoSecondaryContainer)
+                    )
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 Text(
@@ -595,7 +622,7 @@ fun ImperativConjugationCard(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.1.sp,
-                    color = GeoOnSecondaryContainer,
+                    color = if (GeoIsBoldTheme) Color.White else GeoOnSecondaryContainer,
                     maxLines = 1,
                     softWrap = false
                 )

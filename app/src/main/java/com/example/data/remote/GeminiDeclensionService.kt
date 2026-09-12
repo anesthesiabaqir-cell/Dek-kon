@@ -34,6 +34,7 @@ class GeminiDeclensionService(private val context: Context? = null) {
         val result = fetchGrammar(word, com.example.data.model.GrammarType.NOMEN, apiKey, provider, selectedModelId)
         when (result) {
             is com.example.data.model.GrammarResult.Noun -> result.declension
+            is com.example.data.model.GrammarResult.Sentence -> result.declension
             is com.example.data.model.GrammarResult.Verb -> throw IllegalStateException("Erwartetes Nomen, aber Verb erhalten.")
         }
     }
@@ -60,7 +61,11 @@ class GeminiDeclensionService(private val context: Context? = null) {
             throw IOException("Keine Internetverbindung. Die linguistische Analyse erfordert eine aktive Internetverbindung.")
         }
 
-        val prompt = if (type == com.example.data.model.GrammarType.NOMEN) buildNounPrompt(trimmedWord) else buildVerbPrompt(trimmedWord)
+        val prompt = when (type) {
+            com.example.data.model.GrammarType.NOMEN -> buildNounPrompt(trimmedWord)
+            com.example.data.model.GrammarType.VERB -> buildVerbPrompt(trimmedWord)
+            com.example.data.model.GrammarType.SENTENCE -> buildSentencePrompt(trimmedWord)
+        }
 
         val jsonContent = if (provider == ModelProvider.GEMINI) {
             fetchRawFromGemini(prompt, apiKey, selectedModelId)
@@ -365,6 +370,46 @@ class GeminiDeclensionService(private val context: Context? = null) {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun buildSentencePrompt(sentence: String): String {
+        return """
+            You are an authoritative German linguistic dictionary and translator.
+            Analyze and translate the German sentence or expression: "$sentence".
+
+            IMPORTANT SPELLING & TYPO RULE: If the input sentence contains typos, misspellings, accent/umlaut errors, punctuation issues, or incorrect casing (e.g. "gutn morgn" instead of "Guten Morgen", "wie get es dir" instead of "Wie geht es dir"), SILENTLY correct it to the correct intended German sentence and return the translation for the corrected sentence. Do not ask questions, do not add comments, and do not say "Did you mean?". Return the result as if the user had typed the sentence correctly from the beginning, without showing any indication that a correction occurred.
+
+            Include:
+            1. Corrected German sentence in "word" (capitalized correctly, natural German punctuation).
+            2. Type: "Satz".
+            3. Natural, accurate English translation in "meaningEnglish".
+            4. For gender and pluralNoun, provide "–".
+            5. For all grammatical cases (nominativ, akkusativ, dativ, genitiv, ablativ), provide "–".
+
+            Return strictly valid JSON only matching this schema:
+            {
+              "type": "Satz",
+              "word": "Guten Morgen",
+              "gender": "–",
+              "genderArticle": "",
+              "pluralNoun": "–",
+              "meaningEnglish": "Good morning",
+              "singular": {
+                "nominativ": { "definite": "–", "indefinite": "–", "noArticle": "–" },
+                "akkusativ": { "definite": "–", "indefinite": "–", "noArticle": "–" },
+                "dativ": { "definite": "–", "indefinite": "–", "noArticle": "–" },
+                "genitiv": { "definite": "–", "indefinite": "–", "noArticle": "–" },
+                "ablativ": { "definite": "–", "indefinite": "–", "noArticle": "–" }
+              },
+              "plural": {
+                "nominativ": { "definite": "–", "indefinite": "–", "noArticle": "–" },
+                "akkusativ": { "definite": "–", "indefinite": "–", "noArticle": "–" },
+                "dativ": { "definite": "–", "indefinite": "–", "noArticle": "–" },
+                "genitiv": { "definite": "–", "indefinite": "–", "noArticle": "–" },
+                "ablativ": { "definite": "–", "indefinite": "–", "noArticle": "–" }
+              }
+            }
+        """.trimIndent()
     }
 
     private fun buildNounPrompt(word: String): String {

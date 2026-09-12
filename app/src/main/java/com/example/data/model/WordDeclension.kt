@@ -8,11 +8,16 @@ import java.util.Locale
  */
 enum class GrammarType(val displayName: String, val apiPromptType: String) {
     NOMEN("Nomen", "Nomen (Deklination)"),
-    VERB("Verb", "Verb (Konjugation)");
+    VERB("Verb", "Verb (Konjugation)"),
+    SENTENCE("Satz", "Satz (Übersetzung)");
 
     companion object {
-        fun fromString(str: String?): GrammarType =
-            if (str?.trim()?.equals("Verb", ignoreCase = true) == true) VERB else NOMEN
+        fun fromString(str: String?): GrammarType = when {
+            str?.trim()?.equals("Verb", ignoreCase = true) == true -> VERB
+            str?.trim()?.equals("Satz", ignoreCase = true) == true ||
+            str?.trim()?.equals("Sentence", ignoreCase = true) == true -> SENTENCE
+            else -> NOMEN
+        }
     }
 }
 
@@ -52,10 +57,19 @@ data class WordDeclensionResult(
     companion object {
         fun fromJson(jsonStr: String): WordDeclensionResult {
             val root = JSONObject(jsonStr)
-            val word = root.optString("word", "").trim()
-            val gender = root.optString("gender", "Maskulin").trim()
-            val genderArticle = root.optString("genderArticle", "der").trim()
-            val pluralNoun = root.optString("pluralNoun", "").trim()
+            val typeStr = root.optString("type", "").trim()
+            val rawWord = root.optString("word", root.optString("sentence", "")).trim()
+            val word = rawWord
+            val rawGender = root.optString("gender", "Maskulin").trim()
+            val isSentence = typeStr.equals("Satz", ignoreCase = true) ||
+                    typeStr.equals("Sentence", ignoreCase = true) ||
+                    rawGender.equals("Satz", ignoreCase = true) ||
+                    rawGender == "–" ||
+                    rawWord.split(Regex("\\s+")).filter { it.isNotBlank() }.size >= 2
+
+            val gender = if (isSentence) "–" else rawGender
+            val genderArticle = if (isSentence) "" else root.optString("genderArticle", "der").trim()
+            val pluralNoun = if (isSentence) "–" else root.optString("pluralNoun", "").trim()
             val meaningEnglish = root.optString("meaningEnglish",
                 root.optString("meaning", root.optString("meaningArabic", ""))
             ).trim()
@@ -63,19 +77,25 @@ data class WordDeclensionResult(
             val singularObj = root.optJSONObject("singular") ?: JSONObject()
             val pluralObj = root.optJSONObject("plural") ?: JSONObject()
 
-            val singularRows = listOf(
+            val singularRows = mutableListOf(
                 createRow("nominativ", "Nominativ", "Wer oder was?", singularObj),
                 createRow("akkusativ", "Akkusativ", "Wen oder was?", singularObj),
                 createRow("dativ", "Dativ", "Wem?", singularObj),
                 createRow("genitiv", "Genitiv", "Wessen?", singularObj)
             )
+            if (isSentence) {
+                singularRows.add(createRow("ablativ", "Ablativ", "Woher? Womit?", singularObj))
+            }
 
-            val pluralRows = listOf(
+            val pluralRows = mutableListOf(
                 createRow("nominativ", "Nominativ", "Wer oder was?", pluralObj),
                 createRow("akkusativ", "Akkusativ", "Wen oder was?", pluralObj),
                 createRow("dativ", "Dativ", "Wem?", pluralObj),
                 createRow("genitiv", "Genitiv", "Wessen?", pluralObj)
             )
+            if (isSentence) {
+                pluralRows.add(createRow("ablativ", "Ablativ", "Woher? Womit?", pluralObj))
+            }
 
             return WordDeclensionResult(
                 word = word,
@@ -642,18 +662,30 @@ sealed class GrammarResult {
         override val rawJson: String get() = conjugation.rawJson
     }
 
+    data class Sentence(val declension: WordDeclensionResult) : GrammarResult() {
+        override val word: String get() = declension.word
+        override val meaningEnglish: String get() = declension.meaningEnglish
+        override val type: GrammarType get() = GrammarType.SENTENCE
+        override val rawJson: String get() = declension.rawJson
+    }
+
     companion object {
         fun fromJson(jsonStr: String, fallbackType: GrammarType = GrammarType.NOMEN): GrammarResult {
             val root = JSONObject(jsonStr)
             val typeStr = root.optString("type", "").trim()
+            val rawWord = root.optString("word", root.optString("sentence", "")).trim()
+            val isSentence = typeStr.equals("Satz", ignoreCase = true) ||
+                    typeStr.equals("Sentence", ignoreCase = true) ||
+                    fallbackType == GrammarType.SENTENCE ||
+                    rawWord.split(Regex("\\s+")).filter { it.isNotBlank() }.size >= 2
             val isVerb = typeStr.equals("Verb", ignoreCase = true) ||
                     root.has("tenses") || root.has("infinitiv") ||
                     fallbackType == GrammarType.VERB
 
-            return if (isVerb && (root.has("tenses") || fallbackType == GrammarType.VERB)) {
-                Verb(VerbConjugationResult.fromJson(jsonStr))
-            } else {
-                Noun(WordDeclensionResult.fromJson(jsonStr))
+            return when {
+                isSentence -> Sentence(WordDeclensionResult.fromJson(jsonStr))
+                isVerb && (root.has("tenses") || fallbackType == GrammarType.VERB) -> Verb(VerbConjugationResult.fromJson(jsonStr))
+                else -> Noun(WordDeclensionResult.fromJson(jsonStr))
             }
         }
     }
